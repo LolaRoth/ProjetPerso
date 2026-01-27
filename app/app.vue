@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-gray-900 text-white">
+  <div class="min-h-screen bg-MyBlack text-white antialiased">
     <NuxtRouteAnnouncer />
     <NuxtPage />
   </div>

@@ -1,13 +1,7 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-
 /* User-provided fonts placed in public/font/ */
 @font-face {
   font-family: "BricolageGrotesque";
-  src: url("/font/BricolageGrotesque.ttf")
-    format("truetype");
+  src: url("/font/BricolageGrotesque.ttf") format("truetype");
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
@@ -23,18 +17,17 @@
 
 @font-face {
   font-family: "SugarPeachy";
-  src: url("/font/SugarPeachyDEMO.otf") format("opentype");
+  src: url("/font/SugarPeachy.otf") format("opentype");
   font-weight: 400 700;
   font-style: normal;
   font-display: swap;
 }
 
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-/* Optional: set default font stacks using CSS variables or body */
-:root {
-  --font-sans: InterVariable, ui-sans-serif, system-ui;
-}
 
-body {
-  font-family: var(--font-sans);
-}
+
+
+
