@@ -1,14 +1,44 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 /**
  * Experience visuelle interactive - Trouve le bouton caché
  * Dégradation progressive jusqu'au chaos total
  */
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from "vue";
+import type { GameId } from "../../types/supabase";
 
 const nuxtApp = useNuxtApp();
+const router = useRouter();
 const gsap = nuxtApp.$gsap as any;
 const ScrollTrigger = nuxtApp.$ScrollTrigger as any;
 const Draggable = nuxtApp.$Draggable as any;
+
+// ===== AUTH & GAME STATS =====
+const { isAuthenticated } = useAuth();
+const { recordSession } = useGameStats();
+
+// Helper pour enregistrer une session si connecté
+const saveGameSession = async (
+  gameId: GameId,
+  score: number,
+  resultType: "win" | "lose" | "draw" | "abort",
+  timeSpent?: number,
+  extra?: Record<string, any>,
+) => {
+  if (!isAuthenticated.value) return;
+  try {
+    await recordSession({
+      gameId,
+      score,
+      resultType,
+      degradationLevel: Math.round(degradation.level * 100),
+      loops: degradation.cycles,
+      timeSpent: timeSpent ?? degradation.timeSpent,
+      extra,
+    });
+  } catch (e) {
+    console.error("Erreur sauvegarde session:", e);
+  }
+};
 
 // ===== GAME STATE =====
 const gameWon = ref(false);
@@ -44,27 +74,28 @@ const mouseBlobs = ref<
 let mouseBlobId = 0;
 
 const addMouseBlob = (x: number, y: number) => {
-  const color =
-    cursorColors[Math.floor(Math.random() * cursorColors.length)] || "#FF66C8";
-  const size = 20 + Math.random() * 30 + degradation.level * 30;
+  // Use the smooth interpolated cursor color for blobs
+  const color = cursorSmooth.str || "#FF66C8";
+  // Cartoon-style larger soft glow but subtle
+  const size = 36 + Math.random() * 28 + degradation.level * 30;
 
   const id = mouseBlobId++;
   // keep single visible blob (replace previous)
-  mouseBlobs.value = [{ id, x, y, color, size, opacity: 0.9 }];
+  mouseBlobs.value = [{ id, x, y, color, size, opacity: 0.8 }];
 
-  // fade out then remove
+  // smoother fade out
   setTimeout(
     () => {
       const b = mouseBlobs.value.find((m) => m.id === id);
-      if (b) b.opacity = 0.25;
+      if (b) b.opacity = 0.45;
     },
-    250 + Math.random() * 200,
+    420 + Math.random() * 300,
   );
   setTimeout(
     () => {
       mouseBlobs.value = mouseBlobs.value.filter((m) => m.id !== id);
     },
-    900 + Math.random() * 400,
+    1100 + Math.random() * 500,
   );
 };
 
@@ -117,6 +148,81 @@ const gradientStops = computed(() => {
     cursorColors[(idx + 4) % len],
   ];
 });
+
+// Smooth cursor color interpolation state (for fluid transitions)
+const cursorSmooth = reactive({
+  r: 255,
+  g: 102,
+  b: 200,
+  tr: 255,
+  tg: 102,
+  tb: 200,
+  str: "#FF66C8",
+});
+
+const hexToRgb = (hex: string) => {
+  const h = hex.replace("#", "");
+  const bigint = parseInt(
+    h.length === 3
+      ? h
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : h,
+    16,
+  );
+  return { r: (bigint >> 16) & 255, g: (bigint >> 8) & 255, b: bigint & 255 };
+};
+
+const rgbToHex = (r: number, g: number, b: number) => {
+  const toHex = (v: number) =>
+    Math.max(0, Math.min(255, Math.round(v)))
+      .toString(16)
+      .padStart(2, "0");
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+};
+
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+
+// Cartoon cursor state
+const cartoon = reactive({ x: 0, y: 0, tx: 0, ty: 0, scale: 1, visible: true });
+let cursorRAF: number | null = null;
+let cursorLoopRunning = false;
+
+const startCursorLoop = () => {
+  if (cursorLoopRunning) return;
+  cursorLoopRunning = true;
+
+  const loop = () => {
+    // Smoothly follow target
+    cartoon.x = lerp(cartoon.x, cartoon.tx, 0.18);
+    cartoon.y = lerp(cartoon.y, cartoon.ty, 0.18);
+
+    // gentle scale based on movement speed
+    const dx = cartoon.tx - cartoon.x;
+    const dy = cartoon.ty - cartoon.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    cartoon.scale = 1 + Math.min(0.18, dist / 120);
+
+    // Smooth color interpolation
+    cursorSmooth.r = lerp(cursorSmooth.r, cursorSmooth.tr, 0.08);
+    cursorSmooth.g = lerp(cursorSmooth.g, cursorSmooth.tg, 0.08);
+    cursorSmooth.b = lerp(cursorSmooth.b, cursorSmooth.tb, 0.08);
+    cursorSmooth.str = rgbToHex(cursorSmooth.r, cursorSmooth.g, cursorSmooth.b);
+
+    cursorRAF = requestAnimationFrame(loop);
+  };
+
+  loop();
+};
+
+const stopCursorLoop = () => {
+  if (cursorRAF) {
+    cancelAnimationFrame(cursorRAF);
+    cursorRAF = null;
+  }
+  cursorLoopRunning = false;
+};
 
 // Couleurs fixes pour le jeu de séquence (les 4 premières)
 const sequenceGameColors = ["#FF66C8", "#6BFFFF", "#FFF746", "#BBFF42"];
@@ -210,6 +316,15 @@ const updateScroll = (progress: number) => {
 const addInteraction = (amount: number = 1) => {
   degradation.interactions += amount;
   calculateLevel();
+};
+
+// Scroll to a game section by id (smooth)
+const scrollToSection = (id: string) => {
+  if (!document) return;
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.scrollIntoView({ behavior: "smooth", block: "start" });
+  addInteraction(1);
 };
 
 const addClick = () => {
@@ -499,6 +614,17 @@ const handleSequenceClick = (color: string, index: number) => {
   const idx = playerSequence.value.length - 1;
   if (playerSequence.value[idx] !== colorSequence.value[idx]) {
     sequenceMessage.value = "❌ Raté ! Clique JOUER pour réessayer";
+    // Enregistrer la défaite
+    saveGameSession(
+      "color-sequence",
+      sequenceLevel.value * 10,
+      "lose",
+      undefined,
+      {
+        level: sequenceLevel.value,
+        sequenceLength: colorSequence.value.length,
+      },
+    );
     playerSequence.value = [];
     colorSequence.value = [];
     sequenceLevel.value = Math.max(1, sequenceLevel.value - 1);
@@ -507,6 +633,12 @@ const handleSequenceClick = (color: string, index: number) => {
 
   if (playerSequence.value.length === colorSequence.value.length) {
     sequenceMessage.value = `✅ Bravo ! Niveau ${sequenceLevel.value} réussi !`;
+    // Enregistrer la victoire
+    const score = sequenceLevel.value * 20 + colorSequence.value.length * 5;
+    saveGameSession("color-sequence", score, "win", undefined, {
+      level: sequenceLevel.value,
+      sequenceLength: colorSequence.value.length,
+    });
     sequenceLevel.value++;
     degradation.puzzlesSolved++;
     calculateLevel();
@@ -540,7 +672,19 @@ const startClickChallenge = () => {
     clickChallenge.value.timeLeft--;
     if (clickChallenge.value.timeLeft <= 0) {
       if (clickChallengeInterval) clearInterval(clickChallengeInterval);
-      if (clickChallenge.value.current >= clickChallenge.value.target) {
+      const won = clickChallenge.value.current >= clickChallenge.value.target;
+      // Enregistrer la session
+      saveGameSession(
+        "click-challenge",
+        clickChallenge.value.current,
+        won ? "win" : "lose",
+        5,
+        {
+          target: clickChallenge.value.target,
+          current: clickChallenge.value.current,
+        },
+      );
+      if (won) {
         degradation.puzzlesSolved++;
         calculateLevel();
       }
@@ -834,6 +978,13 @@ const handleDrop = (e: DragEvent, zone: PuzzleZone) => {
       degradation.puzzlesSolved += 3;
       calculateLevel();
 
+      // Enregistrer la victoire du puzzle
+      const score = 100 + puzzleCompleted.value * 20;
+      saveGameSession("puzzle-blocks", score, "win", undefined, {
+        puzzleNumber: puzzleCompleted.value,
+        piecesCount: puzzlePieces.value.length,
+      });
+
       // Reset puzzle après 2 secondes pour rejouer
       setTimeout(() => {
         resetPuzzle();
@@ -906,20 +1057,23 @@ const resetPuzzle = () => {
     "Nouveau puzzle ! Glisse chaque pièce vers sa zone correspondante.";
 };
 
-// ===== SLIDING PUZZLE (3x3) - Accessible variant =====
+// ===== SLIDING PUZZLE (3x3) - AMÉLIORÉ avec stats =====
 const gridSize = 3;
 const slidingTiles = ref<number[]>([]); // 0 represents the empty slot
-const slidingMessage = ref("Réarrange les tuiles pour remettre l'ordre.");
-const tileEmojiMap: Record<number, string> = {
-  1: "🐱",
-  2: "🐶",
-  3: "🦊",
-  4: "🐼",
-  5: "🐵",
-  6: "🐸",
-  7: "🦁",
-  8: "🐹",
-};
+const slidingMessage = ref(
+  "Choisis une image et clique sur Mélanger pour commencer !",
+);
+
+const slidingGame = ref({
+  active: false,
+  moves: 0,
+  timer: 0,
+  bestTime: 0,
+  bestMoves: 0,
+  puzzlesSolved: 0,
+});
+
+let slidingTimerInterval: ReturnType<typeof setInterval> | null = null;
 
 // SVG-based image reconstruction: list of SVGs in public/svg
 const svgFiles = ["/svg/flower-cart.svg", "/svg/tel-cart.svg"];
@@ -971,7 +1125,12 @@ const isSolvable = (tiles: number[]) => {
 
 const initSliding = () => {
   slidingTiles.value = [1, 2, 3, 4, 5, 6, 7, 8, 0];
-  slidingMessage.value = "Nouvelle partie : résous le puzzle !";
+  slidingGame.value.active = false;
+  slidingGame.value.moves = 0;
+  slidingGame.value.timer = 0;
+  if (slidingTimerInterval) clearInterval(slidingTimerInterval);
+  slidingMessage.value =
+    "Choisis une image et clique sur Mélanger pour commencer !";
 };
 
 const shuffleSliding = () => {
@@ -988,12 +1147,27 @@ const shuffleSliding = () => {
   } while (!isSolvable(arr) || isSolved(arr));
 
   slidingTiles.value = arr;
-  slidingMessage.value = "Mélangé ! Recommencez.";
+
+  // Reset and start the game
+  slidingGame.value.active = true;
+  slidingGame.value.moves = 0;
+  slidingGame.value.timer = 0;
+  slidingMessage.value = "🎮 C'est parti ! Remets les pièces dans l'ordre";
+
+  // Start timer
+  if (slidingTimerInterval) clearInterval(slidingTimerInterval);
+  slidingTimerInterval = setInterval(() => {
+    if (slidingGame.value.active) {
+      slidingGame.value.timer++;
+    }
+  }, 1000);
 };
 
 const findEmpty = () => slidingTiles.value.findIndex((n) => n === 0);
 
-const handleTileClick = (idx: number) => {
+const handleTileClick = async (idx: number) => {
+  if (!slidingGame.value.active) return;
+
   const eIdx = findEmpty();
   const rowA = Math.floor(idx / gridSize);
   const colA = idx % gridSize;
@@ -1007,18 +1181,63 @@ const handleTileClick = (idx: number) => {
     const b = slidingTiles.value[eIdx] as number;
     slidingTiles.value[idx] = b;
     slidingTiles.value[eIdx] = a;
-    // simple feedback
-    slidingMessage.value = "Tuile déplacée";
+
+    slidingGame.value.moves++;
+    addInteraction(1);
+
     // check win
     if (isSolved(slidingTiles.value)) {
-      slidingMessage.value = "Bravo ! Puzzle résolu 🎉";
+      slidingGame.value.active = false;
+      if (slidingTimerInterval) clearInterval(slidingTimerInterval);
+
+      slidingGame.value.puzzlesSolved++;
+
+      // Check for new best records
+      const isNewBestTime =
+        slidingGame.value.bestTime === 0 ||
+        slidingGame.value.timer < slidingGame.value.bestTime;
+      const isNewBestMoves =
+        slidingGame.value.bestMoves === 0 ||
+        slidingGame.value.moves < slidingGame.value.bestMoves;
+
+      if (isNewBestTime) {
+        slidingGame.value.bestTime = slidingGame.value.timer;
+      }
+      if (isNewBestMoves) {
+        slidingGame.value.bestMoves = slidingGame.value.moves;
+      }
+
+      // Calculate score based on time and moves
+      const timeBonus = Math.max(0, 300 - slidingGame.value.timer * 2);
+      const movesBonus = Math.max(0, 200 - slidingGame.value.moves * 3);
+      const score = 100 + timeBonus + movesBonus;
+
+      slidingMessage.value = `🎉 Bravo ! Résolu en ${slidingGame.value.timer}s et ${slidingGame.value.moves} coups ! Score: ${score}`;
+
       degradation.puzzlesSolved++;
       calculateLevel();
+
       spawnParticles(
         100 + Math.random() * 600,
         100 + Math.random() * 300,
         "#BBFF42",
-        18,
+        25,
+      );
+
+      // Save game session
+      await saveGameSession(
+        "puzzle-blocks",
+        score,
+        "win",
+        slidingGame.value.timer,
+        {
+          moves: slidingGame.value.moves,
+          puzzleType: "sliding-3x3",
+          image: selectedSvg.value,
+          isNewBestTime,
+          isNewBestMoves,
+          puzzleNumber: slidingGame.value.puzzlesSolved,
+        },
       );
     }
   }
@@ -1316,116 +1535,287 @@ const handleTypingInput = (e: Event) => {
 
 const endTypingGame = () => {
   if (typingInterval) clearInterval(typingInterval);
+
+  const won = typingGame.value.wordsCompleted >= 5;
+  // Enregistrer la session
+  saveGameSession(
+    "typing-game",
+    typingGame.value.score,
+    won ? "win" : "lose",
+    30 - typingGame.value.timeLeft,
+    {
+      wordsCompleted: typingGame.value.wordsCompleted,
+      timeLeft: typingGame.value.timeLeft,
+    },
+  );
+
   typingGame.value.active = false;
 
-  if (typingGame.value.wordsCompleted >= 5) {
+  if (won) {
     degradation.puzzlesSolved++;
     calculateLevel();
   }
 };
 
-// ===== INTERACTIVE: Target Shooting =====
-const targets = ref<{ id: number; x: number; y: number; hit: boolean }[]>([]);
-const targetScore = ref(0);
+// ===== INTERACTIVE: Target Shooting (AMÉLIIORÉ) =====
+interface Target {
+  id: number;
+  x: number;
+  y: number;
+  hit: boolean;
+  size: number;
+  lifetime: number;
+  spawnTime: number;
+}
 
-const spawnTarget = () => {
-  // Limit active targets based on degradation level
-  const maxTargets = 3 + Math.floor(degradation.level * 5);
-  if (targets.value.length >= maxTargets) return;
+const targets = ref<Target[]>([]);
+const targetGame = ref({
+  active: false,
+  score: 0,
+  missed: 0,
+  combo: 0,
+  maxCombo: 0,
+  timeLeft: 30,
+  bestScore: 0,
+  totalTargetsSpawned: 0,
+  difficulty: "normal" as "easy" | "normal" | "hard",
+});
 
-  const size = 28 + Math.random() * 36;
+let targetGameInterval: ReturnType<typeof setInterval> | null = null;
+let targetGameSpawnInterval: ReturnType<typeof setInterval> | null = null;
+
+const getDifficultySettings = () => {
+  const settings = {
+    easy: {
+      spawnRate: 1500,
+      lifetime: 3000,
+      maxTargets: 4,
+      pointsMultiplier: 1,
+    },
+    normal: {
+      spawnRate: 1000,
+      lifetime: 2000,
+      maxTargets: 6,
+      pointsMultiplier: 1.5,
+    },
+    hard: {
+      spawnRate: 700,
+      lifetime: 1200,
+      maxTargets: 8,
+      pointsMultiplier: 2,
+    },
+  };
+  return settings[targetGame.value.difficulty];
+};
+
+const startTargetGame = (difficulty: "easy" | "normal" | "hard" = "normal") => {
+  if (targetGame.value.active) return;
+
+  targetGame.value = {
+    active: true,
+    score: 0,
+    missed: 0,
+    combo: 0,
+    maxCombo: 0,
+    timeLeft: 30,
+    bestScore: targetGame.value.bestScore,
+    totalTargetsSpawned: 0,
+    difficulty,
+  };
+  targets.value = [];
+
+  const settings = getDifficultySettings();
+
+  // Timer countdown
+  targetGameInterval = setInterval(() => {
+    targetGame.value.timeLeft--;
+    if (targetGame.value.timeLeft <= 0) {
+      endTargetGame();
+    }
+  }, 1000);
+
+  // Spawn targets
+  targetGameSpawnInterval = setInterval(() => {
+    spawnGameTarget();
+  }, settings.spawnRate);
+
+  // Spawn first target immediately
+  spawnGameTarget();
+};
+
+const spawnGameTarget = () => {
+  if (!targetGame.value.active) return;
+
+  const settings = getDifficultySettings();
+  if (targets.value.filter((t) => !t.hit).length >= settings.maxTargets) return;
+
   const id = Date.now() + Math.floor(Math.random() * 1000);
-  const t = {
+  const size = 35 + Math.random() * 25;
+  const lifetime = settings.lifetime + Math.random() * 500;
+
+  const target: Target = {
     id,
     x: 8 + Math.random() * 84,
     y: 8 + Math.random() * 84,
     hit: false,
     size,
-  } as any;
-  targets.value.push(t);
+    lifetime,
+    spawnTime: Date.now(),
+  };
 
-  // Auto-remove after a lifetime influenced by degradation
-  const lifetime = 2000 + Math.random() * 2000 - degradation.level * 800;
-  setTimeout(
-    () => {
-      targets.value = targets.value;
-      const color =
-        cursorColors[Math.floor(Math.random() * cursorColors.length)] ||
-        "#FF66C8";
-      const size = 40 + degradation.level * 50; // bigger than before
-    },
-    Math.max(900, lifetime),
-  );
+  targets.value.push(target);
+  targetGame.value.totalTargetsSpawned++;
+
+  // Auto-miss after lifetime
+  setTimeout(() => {
+    const t = targets.value.find((t) => t.id === id);
+    if (t && !t.hit && targetGame.value.active) {
+      targetGame.value.missed++;
+      targetGame.value.combo = 0;
+      targets.value = targets.value.filter((t) => t.id !== id);
+    }
+  }, lifetime);
 };
 
 const hitTarget = (id: number) => {
-  const target = targets.value.find((t) => t.id === id) as any;
-  if (target && !target.hit) {
-    target.hit = true;
+  const target = targets.value.find((t) => t.id === id);
+  if (!target || target.hit) return;
 
-    // Score and combo logic
-    const points = 1 + Math.floor(degradation.level * 2);
-    targetScore.value += points;
-    addInteraction(12 + points);
+  target.hit = true;
 
-    if (targetScore.value % 5 === 0) {
-      degradation.puzzlesSolved++;
-      calculateLevel();
-    }
+  const settings = getDifficultySettings();
 
-    // Spawn colorful particles at target position
-    spawnParticles(
-      (target.x / 100) * window.innerWidth,
-      (target.y / 100) * window.innerHeight,
-      cursorColors[Math.floor(Math.random() * cursorColors.length)] ||
-        "#FF66C8",
-      10 + Math.floor(Math.random() * 8),
-    );
+  // Calculate points with combo and difficulty bonus
+  const basePoints = 10;
+  const comboBonus = Math.min(targetGame.value.combo * 2, 20);
+  const timeBonus = Math.max(
+    0,
+    Math.floor((target.lifetime - (Date.now() - target.spawnTime)) / 100),
+  );
+  const points = Math.round(
+    (basePoints + comboBonus + timeBonus) * settings.pointsMultiplier,
+  );
 
-    // Animate hit element and remove
-    const el = document.querySelector(`[data-target-id="${id}"]`);
-    if (el && gsap) {
-      gsap.fromTo(
-        el,
-        { scale: 1, opacity: 1 },
-        {
-          scale: 2.2,
-          opacity: 0,
-          duration: 0.45,
-          ease: "power2.out",
-          onComplete: () => {
-            targets.value = targets.value.filter((t) => t.id !== id);
-          },
+  targetGame.value.score += points;
+  targetGame.value.combo++;
+  if (targetGame.value.combo > targetGame.value.maxCombo) {
+    targetGame.value.maxCombo = targetGame.value.combo;
+  }
+
+  addInteraction(12 + points / 2);
+
+  // Spawn colorful particles at target position
+  spawnParticles(
+    (target.x / 100) * window.innerWidth,
+    (target.y / 100) * window.innerHeight,
+    cursorColors[Math.floor(Math.random() * cursorColors.length)] || "#FF66C8",
+    10 + Math.floor(Math.random() * 8),
+  );
+
+  // Animate hit element and remove
+  const el = document.querySelector(`[data-target-id="${id}"]`);
+  if (el && gsap) {
+    gsap.fromTo(
+      el,
+      { scale: 1, opacity: 1 },
+      {
+        scale: 2.2,
+        opacity: 0,
+        duration: 0.35,
+        ease: "power2.out",
+        onComplete: () => {
+          targets.value = targets.value.filter((t) => t.id !== id);
         },
-      );
-    } else {
-      targets.value = targets.value.filter((t) => t.id !== id);
-    }
+      },
+    );
+  } else {
+    targets.value = targets.value.filter((t) => t.id !== id);
   }
 };
 
+const endTargetGame = async () => {
+  if (targetGameInterval) clearInterval(targetGameInterval);
+  if (targetGameSpawnInterval) clearInterval(targetGameSpawnInterval);
+
+  targetGame.value.active = false;
+
+  // Update best score
+  const isNewBest = targetGame.value.score > targetGame.value.bestScore;
+  if (isNewBest) {
+    targetGame.value.bestScore = targetGame.value.score;
+  }
+
+  // Add to degradation
+  if (targetGame.value.score > 50) {
+    degradation.puzzlesSolved++;
+    calculateLevel();
+  }
+
+  // Calculate accuracy
+  const accuracy =
+    targetGame.value.totalTargetsSpawned > 0
+      ? Math.round(
+          ((targetGame.value.totalTargetsSpawned - targetGame.value.missed) /
+            targetGame.value.totalTargetsSpawned) *
+            100,
+        )
+      : 0;
+
+  // Save game session
+  await saveGameSession(
+    "target-shooting",
+    targetGame.value.score,
+    targetGame.value.score >= 50 ? "win" : "lose",
+    30,
+    {
+      targetsHit:
+        targetGame.value.totalTargetsSpawned - targetGame.value.missed,
+      targetsMissed: targetGame.value.missed,
+      maxCombo: targetGame.value.maxCombo,
+      accuracy,
+      difficulty: targetGame.value.difficulty,
+      isNewBest,
+    },
+  );
+
+  // Clear remaining targets
+  targets.value = [];
+};
+
 // ===== SECRET BUTTON =====
-const handleSecretClick = () => {
-  if (!gameWon.value && gsap) {
+const handleSecretClick = async () => {
+  if (!gameWon.value) {
     gameWon.value = true;
 
-    // Epic win animation
-    gsap.to(".win-overlay", {
-      opacity: 1,
-      duration: 0.5,
-    });
-
-    gsap.fromTo(
-      ".win-text",
-      { scale: 0, rotation: -180 },
+    // Save the win session
+    await saveGameSession(
+      "secret-button",
+      1000 + Math.round((1 - degradation.level) * 500), // Bonus for finding earlier
+      "win",
+      degradation.timeSpent,
       {
-        scale: 1,
-        rotation: 0,
-        duration: 1,
-        ease: "elastic.out(1, 0.5)",
-        delay: 0.3,
+        hintsUsed: hintsUsed.value,
+        degradationAtWin: Math.round(degradation.level * 100),
+        interactions: degradation.interactions,
+        clicks: degradation.clicks,
       },
     );
+
+    // Brief flash animation then redirect
+    if (gsap) {
+      gsap.to("body", {
+        backgroundColor: "#fff",
+        duration: 0.3,
+        yoyo: true,
+        repeat: 1,
+        onComplete: () => {
+          router.push("/fin");
+        },
+      });
+    } else {
+      // Fallback without gsap
+      router.push("/fin");
+    }
   }
 };
 
@@ -1443,12 +1833,164 @@ const reloadPage = () => {
   }
 };
 
+// ===== HIDDEN CATCH GAME (in horizontal scroll) =====
+interface FallingStar {
+  id: number;
+  x: number;
+  y: number;
+  speed: number;
+  size: number;
+  color: string;
+  caught: boolean;
+}
+
+const catchGame = reactive({
+  active: false,
+  score: 0,
+  missed: 0,
+  timeLeft: 20,
+  bestScore: 0,
+  combo: 0,
+  maxCombo: 0,
+});
+
+const fallingStars = ref<FallingStar[]>([]);
+let catchGameInterval: ReturnType<typeof setInterval> | null = null;
+let catchGameSpawnInterval: ReturnType<typeof setInterval> | null = null;
+let catchStarId = 0;
+
+const startCatchGame = () => {
+  if (catchGame.active) return;
+
+  catchGame.active = true;
+  catchGame.score = 0;
+  catchGame.missed = 0;
+  catchGame.timeLeft = 20;
+  catchGame.combo = 0;
+  catchGame.maxCombo = 0;
+  fallingStars.value = [];
+
+  // Timer countdown
+  catchGameInterval = setInterval(() => {
+    catchGame.timeLeft--;
+    if (catchGame.timeLeft <= 0) {
+      endCatchGame();
+    }
+  }, 1000);
+
+  // Spawn stars
+  catchGameSpawnInterval = setInterval(() => {
+    spawnFallingStar();
+  }, 600);
+
+  // Animation loop for falling
+  const animateStars = () => {
+    if (!catchGame.active) return;
+
+    fallingStars.value = fallingStars.value
+      .map((star) => {
+        if (star.caught) return star;
+        return { ...star, y: star.y + star.speed };
+      })
+      .filter((star) => {
+        if (star.y > 100 && !star.caught) {
+          catchGame.missed++;
+          catchGame.combo = 0;
+          return false;
+        }
+        return star.y <= 110 || star.caught;
+      });
+
+    if (catchGame.active) {
+      requestAnimationFrame(animateStars);
+    }
+  };
+
+  requestAnimationFrame(animateStars);
+};
+
+const spawnFallingStar = () => {
+  if (!catchGame.active) return;
+
+  const colors = ["#FF66C8", "#6BFFFF", "#FFF746", "#BBFF42", "#FF8855"];
+  const star: FallingStar = {
+    id: catchStarId++,
+    x: 10 + Math.random() * 80,
+    y: -5,
+    speed: 0.8 + Math.random() * 1.2 + (20 - catchGame.timeLeft) * 0.05,
+    size: 30 + Math.random() * 20,
+    color: colors[Math.floor(Math.random() * colors.length)] || "#FFF746",
+    caught: false,
+  };
+
+  fallingStars.value.push(star);
+};
+
+const catchStar = (id: number) => {
+  const star = fallingStars.value.find((s) => s.id === id);
+  if (!star || star.caught) return;
+
+  star.caught = true;
+  catchGame.combo++;
+  if (catchGame.combo > catchGame.maxCombo) {
+    catchGame.maxCombo = catchGame.combo;
+  }
+
+  // Score with combo bonus
+  const comboBonus = Math.floor(catchGame.combo / 3);
+  catchGame.score += 10 + comboBonus * 5;
+
+  // Spawn particles
+  const rect = document
+    .querySelector(`[data-star-id="${id}"]`)
+    ?.getBoundingClientRect();
+  if (rect) {
+    spawnParticles(
+      rect.left + rect.width / 2,
+      rect.top + rect.height / 2,
+      star.color,
+      6,
+    );
+  }
+
+  addInteraction(3);
+
+  // Remove after animation
+  setTimeout(() => {
+    fallingStars.value = fallingStars.value.filter((s) => s.id !== id);
+  }, 200);
+};
+
+const endCatchGame = () => {
+  catchGame.active = false;
+
+  if (catchGameInterval) {
+    clearInterval(catchGameInterval);
+    catchGameInterval = null;
+  }
+  if (catchGameSpawnInterval) {
+    clearInterval(catchGameSpawnInterval);
+    catchGameSpawnInterval = null;
+  }
+
+  if (catchGame.score > catchGame.bestScore) {
+    catchGame.bestScore = catchGame.score;
+  }
+
+  // Boost degradation for playing hidden game
+  degradation.puzzlesSolved++;
+  calculateLevel();
+
+  fallingStars.value = [];
+};
+
 // ===== REFS =====
 const mainContainer = ref<HTMLElement | null>(null);
 const heroTitle = ref<HTMLElement | null>(null);
+const horizontalSection = ref<HTMLElement | null>(null);
+const currentHorizontalPanel = ref(1);
 const isClient = ref(false);
 let timeInterval: ReturnType<typeof setInterval> | null = null;
-let targetSpawnInterval: ReturnType<typeof setInterval> | null = null;
 let fallInterval: ReturnType<typeof setInterval> | null = null;
 let dynamicElementsInterval: ReturnType<typeof setInterval> | null = null;
 let floatingAnimationInterval: ReturnType<typeof setInterval> | null = null;
@@ -1507,9 +2049,24 @@ const handleMouseMove = (e: MouseEvent) => {
       Math.floor((e.clientX / window.innerWidth) * cursorColors.length) %
       cursorColors.length;
   }
+
+  // set target color for smooth interpolation
+  const idx = cursorColorIndex.value % cursorColors.length;
+  const targetHex = cursorColors[idx] || "#FF66C8";
+  const rgb = hexToRgb(targetHex);
+  cursorSmooth.tr = rgb.r;
+  cursorSmooth.tg = rgb.g;
+  cursorSmooth.tb = rgb.b;
+  cursorSmooth.str = targetHex;
+
+  // update reveal and blobs
   addRevealCircle(e.clientX, e.clientY);
   addMouseBlob(e.clientX, e.clientY);
   addInteraction(0.05);
+
+  // update follower target (kept for smooth color interpolation)
+  cartoon.tx = e.clientX;
+  cartoon.ty = e.clientY;
 };
 
 // Pas besoin de fadeOutDots, les cercles restent permanents pour l'effet de révélation
@@ -1529,8 +2086,6 @@ onMounted(async () => {
     calculateLevel();
   }, 1000);
 
-  targetSpawnInterval = setInterval(spawnTarget, 2000);
-
   fallInterval = setInterval(triggerFall, 800);
 
   // Dynamic elements generation based on degradation
@@ -1546,6 +2101,29 @@ onMounted(async () => {
       end: "bottom bottom",
       scrub: 0.3,
       onUpdate: (self: any) => updateScroll(self.progress),
+    });
+  }
+
+  // Horizontal scroll setup
+  if (gsap && ScrollTrigger && horizontalSection.value) {
+    const panels = gsap.utils.toArray(".horizontal-panel");
+    const totalWidth = (panels.length - 1) * window.innerWidth;
+
+    // Keep horizontal scroll behavior but make it less intrusive.
+    gsap.to(".horizontal-scroll-container", {
+      x: -totalWidth,
+      ease: "power1.out",
+      scrollTrigger: {
+        trigger: horizontalSection.value,
+        pin: true,
+        scrub: 0.8,
+        snap: 1 / Math.max(1, panels.length - 1),
+        end: () => "+=" + totalWidth,
+        onUpdate: (self: any) => {
+          currentHorizontalPanel.value =
+            Math.round(self.progress * (panels.length - 1)) + 1;
+        },
+      },
     });
   }
 
@@ -1585,13 +2163,14 @@ onMounted(async () => {
       );
     });
   }
+  // start cursor smoothing loop (keeps color interpolation running)
+  startCursorLoop();
 });
 
 onUnmounted(() => {
   window.removeEventListener("mousemove", handleMouseMove);
   window.removeEventListener("click", addClick);
   if (timeInterval) clearInterval(timeInterval);
-  if (targetSpawnInterval) clearInterval(targetSpawnInterval);
   if (fallInterval) clearInterval(fallInterval);
   if (clickChallengeInterval) clearInterval(clickChallengeInterval);
   if (dynamicElementsInterval) clearInterval(dynamicElementsInterval);
@@ -1599,7 +2178,15 @@ onUnmounted(() => {
   if (typingInterval) clearInterval(typingInterval);
   if (reactionTimeout) clearTimeout(reactionTimeout);
   if (memoryTimerInterval) clearInterval(memoryTimerInterval);
+  if (targetGameInterval) clearInterval(targetGameInterval);
+  if (targetGameSpawnInterval) clearInterval(targetGameSpawnInterval);
+  if (slidingTimerInterval) clearInterval(slidingTimerInterval);
+  if (catchGameInterval) clearInterval(catchGameInterval);
+  if (catchGameSpawnInterval) clearInterval(catchGameSpawnInterval);
   if (ScrollTrigger) ScrollTrigger.getAll().forEach((t: any) => t.kill());
+  // cleanup cursor loop and native cursor class
+  stopCursorLoop();
+  document.body.classList.remove("hide-native-cursor");
 });
 </script>
 
@@ -1639,6 +2226,8 @@ onUnmounted(() => {
         </button>
       </div>
     </div>
+
+    <!-- Custom cursor removed per user request: native cursor restored. -->
 
     <!-- CURSOR REVEAL BACKGROUND LAYER (hidden colorful layer revealed by mouse) -->
     <div class="pointer-events-none fixed inset-0 z-[-1]">
@@ -1942,11 +2531,29 @@ onUnmounted(() => {
     <!-- SECRET BUTTON -->
     <button
       v-if="secretButtonVisible && !gameWon"
-      class="fixed z-[150] h-4 w-4 rounded-full bg-MyGreen/30 hover:bg-MyGreen hover:scale-[3] transition-all duration-300 cursor-pointer"
+      class="fixed z-[150] rounded-full transition-all duration-300 cursor-pointer secret-btn-glow"
+      :class="{
+        'h-3 w-3': degradation.level < 0.8,
+        'h-5 w-5': degradation.level >= 0.8 && degradation.level < 0.95,
+        'h-8 w-8 animate-pulse': degradation.level >= 0.95,
+      }"
       :style="{
         left: `${secretButtonPosition.x}%`,
         top: `${secretButtonPosition.y}%`,
-        opacity: degradation.level > 0.9 ? 0.8 : 0.1,
+        opacity:
+          degradation.level > 0.95
+            ? 1
+            : degradation.level > 0.85
+              ? 0.7
+              : degradation.level > 0.7
+                ? 0.3
+                : 0.1,
+        background: `radial-gradient(circle, ${degradation.level > 0.9 ? '#BBFF42' : '#BBFF42aa'} 0%, transparent 70%)`,
+        boxShadow:
+          degradation.level > 0.9
+            ? '0 0 20px #BBFF42, 0 0 40px #BBFF42aa, 0 0 60px #BBFF4266'
+            : 'none',
+        transform: 'translate(-50%, -50%)',
       }"
       @click="handleSecretClick"
     />
@@ -1965,29 +2572,7 @@ onUnmounted(() => {
       <div class="h-full transition-all duration-500" :style="indicatorStyle" />
     </div>
 
-    <!-- INFO PANEL -->
-    <div
-      class="fixed right-4 top-4 z-50 rounded-xl bg-zinc-900/80 px-4 py-3 backdrop-blur-sm border border-zinc-800"
-      :style="getElementTransform(0)"
-    >
-      <div class="flex items-center gap-3 font-bricolage text-xs">
-        <span
-          class="font-bold capitalize px-2 py-1 rounded"
-          :class="{
-            'bg-MyGreen/20 text-MyGreen': degradation.phase === 'pristine',
-            'bg-MyYellow/20 text-MyYellow': degradation.phase === 'stable',
-            'bg-MyPink/20 text-MyPink': degradation.phase === 'unstable',
-            'bg-MyBlue/20 text-MyBlue': degradation.phase === 'chaotic',
-            'bg-red-500/20 text-red-500': degradation.phase === 'broken',
-          }"
-        >
-          {{ degradation.phase }}
-        </span>
-        <span class="text-zinc-500"
-          >{{ Math.round(degradation.level * 100) }}%</span
-        >
-      </div>
-    </div>
+    <!-- INFO PANEL removed per user request -->
 
     <!-- HINT BUTTON -->
     <button
@@ -2000,23 +2585,89 @@ onUnmounted(() => {
 
     <!-- SECTION 1: HERO -->
     <section
-      class="relative flex min-h-screen flex-col items-center justify-center px-6"
+      class="relative flex min-h-screen flex-col items-center justify-center px-6 overflow-hidden"
     >
+      <!-- Animated background orbs for hero -->
+      <div class="absolute inset-0 pointer-events-none overflow-hidden">
+        <div
+          class="absolute top-1/4 left-1/4 w-96 h-96 bg-MyPink/10 rounded-full blur-3xl animate-float-slow"
+        />
+        <div
+          class="absolute bottom-1/4 right-1/4 w-80 h-80 bg-MyBlue/10 rounded-full blur-3xl animate-float-slow-reverse"
+        />
+        <div
+          class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-MyYellow/5 rounded-full blur-3xl animate-pulse-slow"
+        />
+      </div>
+
       <div class="relative z-10 text-center" :style="getElementTransform(1)">
-        <p class="font-bricolage text-sm text-MyPink mb-4">🎯 OBJECTIF</p>
+        <p
+          class="font-bricolage text-sm text-MyPink mb-4 tracking-widest uppercase animate-fade-in"
+        >
+          🎯 OBJECTIF
+        </p>
         <h1
           ref="heroTitle"
-          class="font-candy text-6xl text-white md:text-8xl lg:text-[10rem]"
+          class="font-candy text-6xl text-white md:text-8xl lg:text-[10rem] hero-title-glow"
         >
-          Trouve le secret.
+          <span class="inline-block animate-title-reveal p-4">Trouve</span>
+          <span
+            class="inline-block animate-title-reveal"
+            style="animation-delay: 0.1s"
+          >
+            le</span
+          >
+          <span
+            class="inline-block animate-title-reveal text-transparent bg-clip-text bg-gradient-to-r from-MyPink via-MyBlue to-MyGreen p-4"
+            style="animation-delay: 0.2s"
+          >
+            secret.</span
+          >
         </h1>
-        <p class="mt-8 max-w-lg font-bricolage text-xl text-zinc-400">
+        <p
+          class="mt-8 max-w-lg mx-auto text-center font-bricolage text-xl text-zinc-400 animate-fade-in-up"
+          style="animation-delay: 0.5s"
+        >
           Un bouton est caché quelque part. Plus le chaos augmente, plus il
           devient visible.
         </p>
-        <p class="mt-4 font-bricolage text-sm text-zinc-600">
+        <p
+          class="mt-4 font-bricolage text-sm text-zinc-600 animate-fade-in-up"
+          style="animation-delay: 0.7s"
+        >
           Interagis • Joue aux mini-jeux • Dégrade le système
         </p>
+
+        <!-- Progress hint -->
+        <div
+          class="mt-12 flex items-center justify-center gap-4 animate-fade-in-up"
+          style="animation-delay: 0.9s"
+        >
+          <div
+            class="flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-800/50 border border-zinc-700"
+          >
+            <span
+              class="w-2 h-2 rounded-full"
+              :class="
+                degradation.level >= 0.7
+                  ? 'bg-MyGreen animate-pulse'
+                  : 'bg-zinc-600'
+              "
+            />
+            <span
+              class="font-bricolage text-xs"
+              :class="
+                degradation.level >= 0.7 ? 'text-MyGreen' : 'text-zinc-500'
+              "
+            >
+              {{
+                degradation.level >= 0.7
+                  ? "Bouton débloqué !"
+                  : `${Math.round(degradation.level * 100)}% / 70%`
+              }}
+            </span>
+          </div>
+        </div>
       </div>
 
       <div
@@ -2026,42 +2677,377 @@ onUnmounted(() => {
       </div>
     </section>
 
+    <!-- HORIZONTAL SCROLL SECTION -->
+    <section ref="horizontalSection" class="horizontal-scroll-wrapper relative">
+      <div class="horizontal-scroll-container flex">
+        <!-- Panel 1 removed by user request -->
+
+        <!-- Panel 2: Features -->
+        <div
+          class="horizontal-panel min-w-[100vw] h-screen flex items-center justify-center relative overflow-hidden"
+        >
+          <div
+            class="absolute inset-0 bg-gradient-to-br from-MyYellow/10 via-transparent to-MyGreen/10"
+          />
+          <div
+            class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-MyYellow via-MyGreen to-MyBlue"
+          />
+          <div class="text-center z-10 px-8">
+            <span
+              class="inline-block px-4 py-2 rounded-full bg-MyYellow/20 border border-MyYellow/50 text-MyYellow text-sm font-bricolage mb-6"
+              >02 / 04</span
+            >
+            <h2 class="font-candy text-5xl md:text-7xl text-white mb-12">
+              Mini-Jeux<br /><span class="text-MyYellow">Addictifs</span>
+            </h2>
+            <div
+              class="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto"
+            >
+              <div
+                role="button"
+                tabindex="0"
+                @click.prevent="scrollToSection('game-sequence')"
+                @keydown.enter="scrollToSection('game-sequence')"
+                class="p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800 hover:border-MyPink/50 transition-all hover:scale-105 cursor-pointer"
+              >
+                <span class="text-4xl">🧠</span>
+                <p class="mt-3 font-bricolage text-white text-sm">Séquence</p>
+              </div>
+              <div
+                role="button"
+                tabindex="0"
+                @click.prevent="scrollToSection('game-target')"
+                @keydown.enter="scrollToSection('game-target')"
+                class="p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800 hover:border-MyBlue/50 transition-all hover:scale-105 cursor-pointer"
+              >
+                <span class="text-4xl">🎯</span>
+                <p class="mt-3 font-bricolage text-white text-sm">Cibles</p>
+              </div>
+              <div
+                role="button"
+                tabindex="0"
+                @click.prevent="scrollToSection('game-puzzle')"
+                @keydown.enter="scrollToSection('game-puzzle')"
+                class="p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800 hover:border-MyYellow/50 transition-all hover:scale-105 cursor-pointer"
+              >
+                <span class="text-4xl">🧩</span>
+                <p class="mt-3 font-bricolage text-white text-sm">Puzzle</p>
+              </div>
+              <div
+                role="button"
+                tabindex="0"
+                @click.prevent="scrollToSection('game-click')"
+                @keydown.enter="scrollToSection('game-click')"
+                class="p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800 hover:border-MyGreen/50 transition-all hover:scale-105 cursor-pointer"
+              >
+                <span class="text-4xl">⚡</span>
+                <p class="mt-3 font-bricolage text-white text-sm">Réflexes</p>
+              </div>
+            </div>
+          </div>
+          <div
+            class="absolute -bottom-32 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-MyYellow/5 rounded-full blur-3xl"
+          />
+        </div>
+
+        <!-- Panel 3: Progress -->
+        <div
+          class="horizontal-panel min-w-[100vw] h-screen flex items-center justify-center relative overflow-hidden"
+        >
+          <div
+            class="absolute inset-0 bg-gradient-to-br from-MyBlue/20 via-transparent to-MyPink/20"
+          />
+          <div
+            class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-MyBlue via-MyPink to-MyYellow"
+          />
+          <div class="text-center z-10 px-8">
+            <span
+              class="inline-block px-4 py-2 rounded-full bg-MyBlue/20 border border-MyBlue/50 text-MyBlue text-sm font-bricolage mb-6"
+              >03 / 04</span
+            >
+            <h2 class="font-candy text-5xl md:text-7xl text-white mb-8">
+              Progression<br /><span class="text-MyBlue">Dynamique</span>
+            </h2>
+            <div class="max-w-md mx-auto">
+              <div class="flex justify-between mb-2">
+                <span class="font-bricolage text-zinc-400">Dégradation</span>
+                <span class="font-candy text-MyPink"
+                  >{{ Math.round(degradation.level * 100) }}%</span
+                >
+              </div>
+              <div class="h-4 rounded-full bg-zinc-800 overflow-hidden">
+                <div
+                  class="h-full rounded-full bg-gradient-to-r from-MyGreen via-MyYellow to-MyPink transition-all duration-500"
+                  :style="{ width: `${degradation.level * 100}%` }"
+                />
+              </div>
+              <p class="mt-6 font-bricolage text-zinc-500">
+                Atteins 70% pour débloquer le secret...
+              </p>
+            </div>
+          </div>
+          <div
+            class="absolute -top-40 -right-40 w-96 h-96 bg-MyBlue/10 rounded-full blur-3xl animate-pulse-slow"
+          />
+        </div>
+
+        <!-- Panel 4: Call to Action -->
+        <div
+          class="horizontal-panel min-w-[100vw] h-screen flex items-center justify-center relative overflow-hidden"
+        >
+          <div
+            class="absolute inset-0 bg-gradient-to-br from-MyGreen/10 via-transparent to-MyYellow/10"
+          />
+          <div
+            class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-MyGreen via-MyPink to-MyBlue"
+          />
+          <div class="text-center z-10 px-8">
+            <span
+              class="inline-block px-4 py-2 rounded-full bg-MyGreen/20 border border-MyGreen/50 text-MyGreen text-sm font-bricolage mb-6"
+              >04 / 04</span
+            >
+            <h2 class="font-candy text-5xl md:text-7xl text-white mb-6">
+              Prêt à<br /><span
+                class="text-transparent bg-clip-text bg-gradient-to-r from-MyGreen via-MyYellow to-MyPink animate-gradient-x"
+                >Jouer ?</span
+              >
+            </h2>
+            <p
+              class="font-bricolage text-xl text-zinc-400 max-w-lg mx-auto mb-8"
+            >
+              Continue de scroller pour découvrir tous les mini-jeux et trouver
+              le bouton secret !
+            </p>
+            <div class="animate-bounce">
+              <span class="font-bricolage text-MyGreen">↓ Continue</span>
+            </div>
+          </div>
+          <div
+            class="absolute -bottom-20 -left-20 w-72 h-72 bg-MyGreen/10 rounded-full blur-3xl"
+          />
+          <div
+            class="absolute top-1/2 right-10 w-40 h-40 bg-MyYellow/10 rounded-full blur-2xl animate-float-slow"
+          />
+        </div>
+
+        <!-- Panel 5: HIDDEN GAME - Catch the Stars -->
+        <div
+          class="horizontal-panel min-w-[100vw] h-screen flex items-center justify-center relative overflow-hidden"
+        >
+          <!-- Animated starfield background -->
+          <div
+            class="absolute inset-0 bg-gradient-to-b from-purple-900/30 via-MyBlack to-MyBlack"
+          />
+          <div class="absolute inset-0 starfield-bg" />
+          <div
+            class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 via-MyPink to-MyYellow"
+          />
+
+          <div class="text-center z-10 px-8 w-full max-w-4xl mx-auto">
+            <span
+              class="inline-block px-4 py-2 rounded-full bg-purple-500/20 border border-purple-500/50 text-purple-400 text-sm font-bricolage mb-4"
+            >
+              ⭐ JEU SECRET ⭐
+            </span>
+
+            <h2 class="font-candy text-4xl md:text-6xl text-white mb-4">
+              <span
+                class="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-MyPink to-MyYellow"
+              >
+                Attrape les Étoiles
+              </span>
+            </h2>
+
+            <!-- Game not started -->
+            <div v-if="!catchGame.active && catchGame.timeLeft === 20">
+              <p class="font-bricolage text-zinc-400 mb-4">
+                Tu as découvert un jeu caché ! Attrape un maximum d'étoiles en
+                20 secondes.
+              </p>
+              <p
+                v-if="catchGame.bestScore > 0"
+                class="font-bricolage text-MyGreen mb-6"
+              >
+                🏆 Meilleur score: {{ catchGame.bestScore }} pts
+              </p>
+              <button
+                @click="startCatchGame"
+                class="px-10 py-4 rounded-full bg-gradient-to-r from-purple-500 to-MyPink font-bricolage text-xl font-bold text-white hover:scale-110 transition-transform shadow-lg shadow-purple-500/30"
+              >
+                ⭐ Jouer
+              </button>
+            </div>
+
+            <!-- Game active -->
+            <div v-else-if="catchGame.active" class="relative">
+              <!-- Stats bar -->
+              <div class="flex justify-center gap-8 mb-4 font-bricolage">
+                <span class="text-white text-xl"
+                  >{{ catchGame.score }} pts</span
+                >
+                <span class="font-candy text-3xl text-MyYellow"
+                  >{{ catchGame.timeLeft }}s</span
+                >
+                <span
+                  v-if="catchGame.combo >= 3"
+                  class="text-MyPink animate-pulse"
+                  >🔥 x{{ catchGame.combo }}</span
+                >
+              </div>
+
+              <!-- Game area -->
+              <div
+                class="relative h-[350px] w-full max-w-2xl mx-auto rounded-2xl bg-zinc-900/80 border border-purple-500/30 overflow-hidden"
+              >
+                <!-- Falling stars -->
+                <button
+                  v-for="star in fallingStars.filter((s) => !s.caught)"
+                  :key="star.id"
+                  :data-star-id="star.id"
+                  class="absolute transition-transform hover:scale-125 cursor-pointer"
+                  :style="{
+                    left: `${star.x}%`,
+                    top: `${star.y}%`,
+                    transform: 'translate(-50%, -50%)',
+                  }"
+                  @click="catchStar(star.id)"
+                >
+                  <span
+                    class="block animate-spin-slow"
+                    :style="{
+                      fontSize: `${star.size}px`,
+                      filter: `drop-shadow(0 0 10px ${star.color})`,
+                    }"
+                    >⭐</span
+                  >
+                </button>
+
+                <p
+                  v-if="fallingStars.length === 0"
+                  class="absolute inset-0 flex items-center justify-center font-bricolage text-zinc-600"
+                >
+                  Les étoiles arrivent...
+                </p>
+              </div>
+            </div>
+
+            <!-- Game ended -->
+            <div v-else class="text-center">
+              <p class="font-candy text-5xl text-MyYellow mb-4">
+                {{ catchGame.score }} pts
+              </p>
+              <p class="font-bricolage text-zinc-400 mb-2">
+                Étoiles ratées: {{ catchGame.missed }} | Max Combo: x{{
+                  catchGame.maxCombo
+                }}
+              </p>
+              <p
+                v-if="
+                  catchGame.score >= catchGame.bestScore && catchGame.score > 0
+                "
+                class="text-MyGreen font-bricolage mb-4"
+              >
+                🎉 Nouveau record !
+              </p>
+              <button
+                @click="startCatchGame"
+                class="px-8 py-3 rounded-full bg-purple-500/80 font-bricolage text-white hover:bg-purple-500 transition-colors"
+              >
+                Rejouer
+              </button>
+            </div>
+          </div>
+
+          <!-- Decorative elements -->
+          <div
+            class="absolute -bottom-20 -right-20 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl animate-pulse-slow"
+          />
+          <div
+            class="absolute -top-20 -left-20 w-60 h-60 bg-MyPink/10 rounded-full blur-3xl"
+          />
+        </div>
+      </div>
+
+      <!-- Horizontal scroll progress indicator -->
+      <div
+        class="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 horizontal-progress-dots flex gap-2"
+      >
+        <div
+          v-for="i in 4"
+          :key="`dot-${i}`"
+          class="w-2 h-2 rounded-full transition-all duration-300 horizontal-dot"
+          :class="{
+            'scale-150': currentHorizontalPanel === i,
+            'bg-purple-500': i === 4 && currentHorizontalPanel === 4,
+            'bg-MyPink': i !== 4 && currentHorizontalPanel === i,
+            'bg-white/20': currentHorizontalPanel !== i,
+          }"
+        />
+      </div>
+    </section>
+
     <!-- SECTION 2: STATS LIVE -->
-    <section class="reveal-section relative min-h-screen px-6 py-24">
-      <div class="mx-auto max-w-4xl" :style="getElementTransform(2)">
+    <section
+      class="reveal-section relative min-h-screen px-6 py-24 overflow-hidden"
+    >
+      <!-- Background decoration -->
+      <div class="absolute inset-0 pointer-events-none">
+        <div
+          class="absolute top-20 left-10 w-64 h-64 bg-MyPink/5 rounded-full blur-3xl animate-float-slow"
+        />
+        <div
+          class="absolute bottom-20 right-10 w-80 h-80 bg-MyBlue/5 rounded-full blur-3xl animate-float-slow-reverse"
+        />
+      </div>
+
+      <div
+        class="mx-auto max-w-4xl relative z-10"
+        :style="getElementTransform(2)"
+      >
         <h2 class="text-center font-candy text-4xl text-white md:text-6xl">
-          État du système
+          <span
+            class="text-transparent bg-clip-text bg-gradient-to-r from-MyPink via-MyBlue to-MyGreen animate-gradient-x"
+            >État du système</span
+          >
         </h2>
 
         <div class="mt-12 grid grid-cols-2 gap-4 md:grid-cols-4">
           <div
-            class="rounded-xl bg-zinc-900/60 p-5 border border-zinc-800 text-center"
+            class="rounded-xl bg-zinc-900/60 p-5 border border-MyPink/30 text-center hover:border-MyPink/60 transition-all hover:scale-105 hover:shadow-lg hover:shadow-MyPink/20 group"
           >
-            <p class="font-candy text-3xl text-MyPink">
+            <p
+              class="font-candy text-3xl text-MyPink group-hover:neon-pink transition-all"
+            >
               {{ Math.round(degradation.level * 100) }}%
             </p>
             <p class="mt-2 font-bricolage text-xs text-zinc-500">Dégradation</p>
           </div>
           <div
-            class="rounded-xl bg-zinc-900/60 p-5 border border-zinc-800 text-center"
+            class="rounded-xl bg-zinc-900/60 p-5 border border-MyBlue/30 text-center hover:border-MyBlue/60 transition-all hover:scale-105 hover:shadow-lg hover:shadow-MyBlue/20 group"
           >
-            <p class="font-candy text-3xl text-MyBlue">
+            <p
+              class="font-candy text-3xl text-MyBlue group-hover:neon-blue transition-all"
+            >
               {{ degradation.clicks }}
             </p>
             <p class="mt-2 font-bricolage text-xs text-zinc-500">Clics</p>
           </div>
           <div
-            class="rounded-xl bg-zinc-900/60 p-5 border border-zinc-800 text-center"
+            class="rounded-xl bg-zinc-900/60 p-5 border border-MyYellow/30 text-center hover:border-MyYellow/60 transition-all hover:scale-105 hover:shadow-lg hover:shadow-MyYellow/20 group"
           >
-            <p class="font-candy text-3xl text-MyYellow">
+            <p
+              class="font-candy text-3xl text-MyYellow group-hover:neon-yellow transition-all"
+            >
               {{ degradation.timeSpent }}s
             </p>
             <p class="mt-2 font-bricolage text-xs text-zinc-500">Temps</p>
           </div>
           <div
-            class="rounded-xl bg-zinc-900/60 p-5 border border-zinc-800 text-center"
+            class="rounded-xl bg-zinc-900/60 p-5 border border-MyGreen/30 text-center hover:border-MyGreen/60 transition-all hover:scale-105 hover:shadow-lg hover:shadow-MyGreen/20 group"
           >
-            <p class="font-candy text-3xl text-MyGreen">
+            <p
+              class="font-candy text-3xl text-MyGreen group-hover:neon-green transition-all"
+            >
               {{ degradation.puzzlesSolved }}
             </p>
             <p class="mt-2 font-bricolage text-xs text-zinc-500">Puzzles</p>
@@ -2087,13 +3073,27 @@ onUnmounted(() => {
     </section>
 
     <!-- SECTION 3: COLOR SEQUENCE GAME (FIXED) -->
-    <section class="reveal-section relative min-h-screen px-6 py-24">
+    <section
+      id="game-sequence"
+      class="reveal-section relative min-h-screen px-6 py-24 overflow-hidden"
+    >
+      <!-- Background decoration -->
+      <div class="absolute inset-0 pointer-events-none">
+        <div
+          class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gradient-radial from-MyPink/10 via-transparent to-transparent rounded-full"
+        />
+      </div>
+
       <div
-        class="mx-auto max-w-2xl text-center"
+        class="mx-auto max-w-2xl text-center relative z-10"
         :style="getElementTransform(3)"
       >
         <h2 class="font-candy text-4xl text-white md:text-6xl">
-          🧠 Séquence de couleurs
+          🧠
+          <span
+            class="text-transparent bg-clip-text bg-gradient-to-r from-MyPink to-MyBlue"
+            >Séquence de couleurs</span
+          >
         </h2>
         <p class="mt-2 font-bricolage text-sm text-zinc-600">
           Niveau {{ sequenceLevel }}
@@ -2166,7 +3166,10 @@ onUnmounted(() => {
     </section>
 
     <!-- SECTION 4: CLICK CHALLENGE -->
-    <section class="reveal-section relative min-h-screen px-6 py-24">
+    <section
+      id="game-click"
+      class="reveal-section relative min-h-screen px-6 py-24"
+    >
       <div
         class="mx-auto max-w-2xl text-center"
         :style="getElementTransform(4)"
@@ -2214,47 +3217,137 @@ onUnmounted(() => {
       </div>
     </section>
 
-    <!-- SECTION 5: TARGET SHOOTING -->
-    <section class="reveal-section relative min-h-screen px-6 py-24">
+    <!-- SECTION 5: TARGET SHOOTING (AMÉLIORÉ) -->
+    <section
+      id="game-target"
+      class="reveal-section relative min-h-screen px-6 py-24"
+    >
       <div class="mx-auto max-w-4xl" :style="getElementTransform(5)">
         <h2 class="text-center font-candy text-4xl text-white md:text-6xl">
           🎯 Chasse aux cibles
         </h2>
-        <p class="mt-4 text-center font-bricolage text-zinc-500">
-          Score: {{ targetScore }} • Clique sur les cibles avant qu'elles
-          disparaissent !
-        </p>
 
-        <div
-          class="relative mt-10 h-[400px] rounded-2xl bg-zinc-900/50 border border-zinc-800 overflow-hidden"
-        >
-          <button
-            v-for="target in targets.filter((t) => !t.hit)"
-            :key="target.id"
-            :data-target-id="target.id"
-            class="absolute h-12 w-12 rounded-full bg-MyPink hover:bg-MyYellow transition-colors cursor-crosshair flex items-center justify-center"
-            :style="{
-              left: `${target.x}%`,
-              top: `${target.y}%`,
-              transform: 'translate(-50%, -50%)',
-            }"
-            @click="hitTarget(target.id)"
-          >
-            <span class="text-xl">🎯</span>
-          </button>
-
+        <!-- Game not active - Show start screen -->
+        <div v-if="!targetGame.active" class="mt-8 text-center">
           <p
-            v-if="targets.filter((t) => !t.hit).length === 0"
-            class="absolute inset-0 flex items-center justify-center font-bricolage text-zinc-600"
+            v-if="targetGame.bestScore > 0"
+            class="font-bricolage text-MyGreen mb-4"
           >
-            En attente de cibles...
+            🏆 Meilleur score: {{ targetGame.bestScore }} points
           </p>
+
+          <p class="font-bricolage text-zinc-500 mb-6">
+            Touche un maximum de cibles en 30 secondes !
+          </p>
+
+          <!-- Difficulty Selection -->
+          <div class="flex flex-wrap justify-center gap-4 mb-8">
+            <button
+              @click="startTargetGame('easy')"
+              class="px-6 py-3 rounded-xl font-bricolage font-bold bg-MyGreen text-MyBlack hover:scale-105 transition-transform"
+            >
+              🌱 Facile<br /><span class="text-xs opacity-70"
+                >Lent • 3s par cible</span
+              >
+            </button>
+            <button
+              @click="startTargetGame('normal')"
+              class="px-6 py-3 rounded-xl font-bricolage font-bold bg-MyYellow text-MyBlack hover:scale-105 transition-transform"
+            >
+              ⚡ Normal<br /><span class="text-xs opacity-70"
+                >Modéré • 2s par cible</span
+              >
+            </button>
+            <button
+              @click="startTargetGame('hard')"
+              class="px-6 py-3 rounded-xl font-bricolage font-bold bg-MyPink text-MyBlack hover:scale-105 transition-transform"
+            >
+              🔥 Difficile<br /><span class="text-xs opacity-70"
+                >Rapide • 1.2s par cible</span
+              >
+            </button>
+          </div>
+
+          <!-- Last game results -->
+          <div
+            v-if="targetGame.score > 0 || targetGame.missed > 0"
+            class="bg-zinc-900/50 rounded-xl p-4 max-w-md mx-auto border border-zinc-800"
+          >
+            <p class="font-bricolage text-zinc-400 text-sm">Dernière partie</p>
+            <p class="font-candy text-3xl text-white mt-1">
+              {{ targetGame.score }} pts
+            </p>
+            <div class="flex justify-center gap-4 mt-2 text-xs text-zinc-500">
+              <span
+                >Touchées:
+                {{ targetGame.totalTargetsSpawned - targetGame.missed }}</span
+              >
+              <span>Ratées: {{ targetGame.missed }}</span>
+              <span>Max Combo: {{ targetGame.maxCombo }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Game active - Show game area -->
+        <div v-else>
+          <!-- Stats bar -->
+          <div class="mt-6 flex justify-center gap-6 font-bricolage text-sm">
+            <span class="text-white font-bold text-lg"
+              >{{ targetGame.score }} pts</span
+            >
+            <span class="text-MyYellow font-candy text-2xl"
+              >{{ targetGame.timeLeft }}s</span
+            >
+            <span v-if="targetGame.combo >= 3" class="text-MyPink animate-pulse"
+              >🔥 x{{ targetGame.combo }}</span
+            >
+          </div>
+
+          <div class="mt-2 flex justify-center gap-4 text-xs text-zinc-500">
+            <span
+              >Touchées:
+              {{ targetGame.totalTargetsSpawned - targetGame.missed }}</span
+            >
+            <span>Ratées: {{ targetGame.missed }}</span>
+          </div>
+
+          <!-- Game area -->
+          <div
+            class="relative mt-6 h-[400px] rounded-2xl bg-zinc-900/50 border border-zinc-800 overflow-hidden cursor-crosshair"
+          >
+            <button
+              v-for="target in targets.filter((t) => !t.hit)"
+              :key="target.id"
+              :data-target-id="target.id"
+              class="absolute rounded-full bg-gradient-to-br from-MyPink to-MyBlue hover:from-MyYellow hover:to-MyGreen transition-all cursor-crosshair flex items-center justify-center shadow-lg shadow-MyPink/30"
+              :style="{
+                left: `${target.x}%`,
+                top: `${target.y}%`,
+                width: `${target.size}px`,
+                height: `${target.size}px`,
+                transform: 'translate(-50%, -50%)',
+              }"
+              @click="hitTarget(target.id)"
+            >
+              <span class="text-xl">🎯</span>
+            </button>
+
+            <p
+              v-if="targets.filter((t) => !t.hit).length === 0"
+              class="absolute inset-0 flex items-center justify-center font-bricolage text-zinc-600 animate-pulse"
+            >
+              Prépare-toi...
+            </p>
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- SECTION 6: PUZZLE (Sliding 3x3 puzzle - more accessible) -->
-    <section class="reveal-section relative min-h-screen px-6 py-24">
+    <!-- SECTION 6: PUZZLE (Sliding 3x3 puzzle - AMÉLIORÉ avec stats) -->
+    <section
+      id="game-puzzle"
+      class="reveal-section relative min-h-screen px-6 py-24"
+    >
       <div class="mx-auto max-w-3xl" :style="getElementTransform(6)">
         <h2 class="text-center font-candy text-4xl text-white md:text-6xl">
           🧩 Puzzle Coulissant
@@ -2262,6 +3355,32 @@ onUnmounted(() => {
         <p class="mt-4 text-center font-bricolage text-zinc-500">
           {{ slidingMessage }}
         </p>
+
+        <!-- Best records display -->
+        <div
+          v-if="slidingGame.bestTime > 0"
+          class="mt-2 flex justify-center gap-6 text-sm"
+        >
+          <span class="text-MyGreen font-bricolage"
+            >🏆 Meilleur temps: {{ slidingGame.bestTime }}s</span
+          >
+          <span class="text-MyBlue font-bricolage"
+            >⭐ Min coups: {{ slidingGame.bestMoves }}</span
+          >
+        </div>
+
+        <!-- Current game stats -->
+        <div
+          v-if="slidingGame.active"
+          class="mt-4 flex justify-center gap-6 font-bricolage"
+        >
+          <span class="text-MyYellow font-candy text-2xl"
+            >⏱️ {{ slidingGame.timer }}s</span
+          >
+          <span class="text-white text-lg"
+            >👆 {{ slidingGame.moves }} coups</span
+          >
+        </div>
 
         <div class="mt-8 mx-auto max-w-sm">
           <div class="flex justify-center gap-4 mb-4">
@@ -2272,7 +3391,7 @@ onUnmounted(() => {
                 :key="svg"
                 @click="selectSvg(svg)"
                 :class="{ 'ring-2 ring-white': selectedSvg === svg }"
-                class="h-10 w-14 rounded overflow-hidden bg-zinc-800"
+                class="h-10 w-14 rounded overflow-hidden bg-zinc-800 hover:scale-105 transition-transform"
                 :style="{
                   backgroundImage: `url(${svg})`,
                   backgroundSize: 'cover',
@@ -2304,22 +3423,31 @@ onUnmounted(() => {
 
           <div class="flex justify-center gap-4 mt-6">
             <button
-              class="px-4 py-2 rounded-full bg-MyBlue text-MyBlack"
+              class="px-4 py-2 rounded-full bg-MyBlue text-MyBlack font-bricolage font-bold hover:scale-105 transition-transform"
               @click="shuffleSliding()"
             >
-              🔀 Mélanger
+              🔀 {{ slidingGame.active ? "Recommencer" : "Jouer" }}
             </button>
             <button
-              class="px-4 py-2 rounded-full bg-MyGreen text-MyBlack"
+              v-if="slidingGame.active"
+              class="px-4 py-2 rounded-full bg-zinc-700 text-white font-bricolage hover:bg-zinc-600 transition-colors"
               @click="initSliding()"
             >
-              ↺ Réinitialiser
+              ⏹️ Abandonner
             </button>
           </div>
 
           <p class="mt-3 text-center text-sm text-zinc-400">
             Clic sur une tuile adjacente pour la déplacer. Remets les tuiles
-            dans l'ordre pour gagner.
+            dans l'ordre pour gagner !
+          </p>
+
+          <!-- Puzzles solved counter -->
+          <p
+            v-if="slidingGame.puzzlesSolved > 0"
+            class="mt-2 text-center text-xs text-MyGreen"
+          >
+            ✅ {{ slidingGame.puzzlesSolved }} puzzle(s) résolu(s) cette session
           </p>
         </div>
       </div>
@@ -2652,5 +3780,303 @@ onUnmounted(() => {
   100% {
     background-position: 0% 50%;
   }
+}
+
+/* New animations for enhanced visuals */
+@keyframes float-slow {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(30px, -30px) scale(1.1);
+  }
+}
+
+@keyframes float-slow-reverse {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-30px, 30px) scale(1.1);
+  }
+}
+
+@keyframes pulse-slow {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: translate(-50%, -50%) scale(1.2);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes title-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(30px) rotateX(-20deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotateX(0);
+  }
+}
+
+@keyframes secret-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 20px #bbff42,
+      0 0 40px #bbff42aa;
+  }
+  50% {
+    box-shadow:
+      0 0 30px #bbff42,
+      0 0 60px #bbff42aa,
+      0 0 80px #bbff4266;
+  }
+}
+
+.animate-float-slow {
+  animation: float-slow 8s ease-in-out infinite;
+}
+
+.animate-float-slow-reverse {
+  animation: float-slow-reverse 10s ease-in-out infinite;
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 6s ease-in-out infinite;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.8s ease-out forwards;
+}
+
+.animate-fade-in-up {
+  opacity: 0;
+  animation: fade-in-up 0.8s ease-out forwards;
+}
+
+.animate-title-reveal {
+  opacity: 0;
+  animation: title-reveal 0.8s ease-out forwards;
+}
+
+.hero-title-glow {
+  text-shadow: 0 0 40px rgba(255, 255, 255, 0.1);
+}
+
+.secret-btn-glow {
+  animation: secret-glow 2s ease-in-out infinite;
+}
+
+/* Horizontal scroll styles */
+.horizontal-scroll-wrapper {
+  overflow: hidden;
+}
+
+.horizontal-scroll-container {
+  will-change: transform;
+}
+
+.horizontal-panel {
+  flex-shrink: 0;
+}
+
+.horizontal-progress-dots {
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.horizontal-scroll-wrapper:hover .horizontal-progress-dots,
+.horizontal-scroll-wrapper .horizontal-progress-dots {
+  opacity: 1;
+}
+
+/* Gradient animation for text */
+@keyframes gradient-x {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animate-gradient-x {
+  background-size: 200% auto;
+  animation: gradient-x 3s ease infinite;
+}
+
+/* Glow effects for cards */
+.glow-pink {
+  box-shadow: 0 0 30px rgba(255, 102, 200, 0.3);
+}
+
+.glow-blue {
+  box-shadow: 0 0 30px rgba(107, 255, 255, 0.3);
+}
+
+.glow-yellow {
+  box-shadow: 0 0 30px rgba(255, 247, 70, 0.3);
+}
+
+/* Cartoon cursor styles */
+/* custom cursor removed - native cursor visible */
+
+.glow-green {
+  box-shadow: 0 0 30px rgba(187, 255, 66, 0.3);
+}
+
+/* Shimmer effect */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+/* Neon text effect */
+.neon-pink {
+  text-shadow:
+    0 0 10px #ff66c8,
+    0 0 20px #ff66c8,
+    0 0 40px #ff66c8;
+}
+
+.neon-blue {
+  text-shadow:
+    0 0 10px #6bffff,
+    0 0 20px #6bffff,
+    0 0 40px #6bffff;
+}
+
+.neon-yellow {
+  text-shadow:
+    0 0 10px #fff746,
+    0 0 20px #fff746,
+    0 0 40px #fff746;
+}
+
+.neon-green {
+  text-shadow:
+    0 0 10px #bbff42,
+    0 0 20px #bbff42,
+    0 0 40px #bbff42;
+}
+
+/* Starfield background for hidden game */
+.starfield-bg {
+  background-image:
+    radial-gradient(2px 2px at 20px 30px, white, transparent),
+    radial-gradient(
+      2px 2px at 40px 70px,
+      rgba(255, 255, 255, 0.8),
+      transparent
+    ),
+    radial-gradient(1px 1px at 90px 40px, white, transparent),
+    radial-gradient(
+      2px 2px at 160px 120px,
+      rgba(255, 255, 255, 0.9),
+      transparent
+    ),
+    radial-gradient(1px 1px at 230px 80px, white, transparent),
+    radial-gradient(
+      2px 2px at 300px 150px,
+      rgba(255, 255, 255, 0.7),
+      transparent
+    ),
+    radial-gradient(1px 1px at 370px 60px, white, transparent),
+    radial-gradient(
+      2px 2px at 450px 200px,
+      rgba(255, 255, 255, 0.8),
+      transparent
+    );
+  background-size: 500px 250px;
+  animation: starfield-move 60s linear infinite;
+}
+
+@keyframes starfield-move {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 500px 250px;
+  }
+}
+
+/* Slow spin for stars */
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 3s linear infinite;
+}
+
+/* Star catch animation */
+@keyframes star-catch {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.5);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(0);
+    opacity: 0;
+  }
+}
+
+.star-caught {
+  animation: star-catch 0.3s ease-out forwards;
 }
 </style>

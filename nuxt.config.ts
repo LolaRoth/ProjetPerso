@@ -14,4 +14,12 @@ export default defineNuxtConfig({
     // unresolved "~/" import in generated .nuxt files on some setups).
     configPath: "tailwind.config.ts",
   },
+
+  // Configuration Supabase via variables d'environnement
+  runtimeConfig: {
+    public: {
+      supabaseUrl: process.env.SUPABASE_URL || "",
+      supabaseAnonKey: process.env.SUPABASE_ANON_KEY || "",
+    },
+  },
 });
