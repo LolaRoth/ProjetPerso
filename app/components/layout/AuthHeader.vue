@@ -1,15 +1,13 @@
 <template>
   <ClientOnly>
-    <header
-      class="fixed top-0 left-0 right-0 z-50 bg-gray-900/80 backdrop-blur-sm border-b border-gray-800"
-    >
+    <header class="fixed top-0 left-0 right-0 z-50">
       <div
         class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between"
       >
         <!-- Logo / Home Link -->
         <NuxtLink
           to="/"
-          class="text-xl font-bold text-white hover:text-purple-400 transition-colors"
+          class="text-xl font-bold text-white/80 hover:text-white transition-colors"
         >
           Experience
         </NuxtLink>
@@ -44,14 +42,14 @@
           <template v-else-if="isAuthenticated">
             <NuxtLink
               to="/profile"
-              class="flex items-center gap-2 text-gray-300 hover:text-white transition-colors"
+              class="flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
             >
               <div
-                class="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-medium text-sm"
+                class="w-8 h-8 bg-gradient-to-br from-purple-500/80 to-pink-500/80 rounded-full flex items-center justify-center text-white font-medium text-sm"
               >
                 {{ userInitial }}
               </div>
-              <span class="hidden sm:inline">{{ displayName }}</span>
+              <span class="hidden sm:inline text-sm">{{ displayName }}</span>
             </NuxtLink>
           </template>
 
@@ -59,13 +57,13 @@
           <template v-else>
             <NuxtLink
               to="/login"
-              class="px-3 py-1.5 text-sm text-gray-300 hover:text-white transition-colors"
+              class="px-3 py-1.5 text-sm text-gray-400 hover:text-white transition-colors"
             >
               Connexion
             </NuxtLink>
             <NuxtLink
               to="/register"
-              class="px-4 py-1.5 text-sm bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-lg transition-all"
+              class="px-4 py-1.5 text-sm bg-white/10 hover:bg-white/20 text-white/90 rounded-lg transition-all border border-white/10"
             >
               S'inscrire
             </NuxtLink>
@@ -81,7 +79,6 @@
  * Composant Header d'authentification
  * Affiche l'état de connexion et les actions associées
  */
-const router = useRouter();
 const { user, profile, isAuthenticated, loading, initAuth } = useAuth();
 
 // Initialiser l'auth au montage du composant
@@ -102,3 +99,7 @@ const userInitial = computed(() => {
 
 // Logout removed from header by request
 </script>
+
+<style scoped>
+/* Header totalement transparent */
+</style>

@@ -265,4 +265,5 @@ export type GameId =
   | "typing-game"
   | "secret-button"
   | "memory-game"
-  | "reaction-time";
+  | "reaction-time"
+  | "attention-quiz";

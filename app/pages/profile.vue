@@ -14,12 +14,82 @@
           class="rounded-2xl p-6 bg-gradient-to-br from-MyPink/10 via-transparent to-MyBlue/10 backdrop-blur-sm border border-white/6 flex items-center justify-between shadow-lg"
         >
           <div class="flex items-center gap-4">
-            <div
-              class="w-20 h-20 rounded-full flex items-center justify-center text-white text-2xl font-bold avatar-shadow"
-              style="background: linear-gradient(135deg, #8b5cf6, #ec4899)"
-            >
-              {{ userInitials }}
+            <!-- Avatar avec upload -->
+            <div class="relative group">
+              <div
+                v-if="profile?.avatar_url"
+                class="w-20 h-20 rounded-full overflow-hidden avatar-shadow ring-2 ring-white/20"
+              >
+                <img
+                  :src="profile.avatar_url"
+                  :alt="userDisplayName"
+                  class="w-full h-full object-cover"
+                />
+              </div>
+              <div
+                v-else
+                class="w-20 h-20 rounded-full flex items-center justify-center text-white text-2xl font-bold avatar-shadow"
+                style="background: linear-gradient(135deg, #8b5cf6, #ec4899)"
+              >
+                {{ userInitials }}
+              </div>
+
+              <!-- Overlay pour changer la photo -->
+              <label
+                class="absolute inset-0 rounded-full bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer flex items-center justify-center"
+              >
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  class="hidden"
+                  @change="handleAvatarUpload"
+                  :disabled="uploadingAvatar"
+                />
+                <svg
+                  v-if="!uploadingAvatar"
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-6 w-6 text-white"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
+                  />
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
+                </svg>
+                <svg
+                  v-else
+                  class="animate-spin h-6 w-6 text-white"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    class="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    stroke-width="4"
+                  />
+                  <path
+                    class="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
+                </svg>
+              </label>
             </div>
+
             <div>
               <h1
                 class="text-4xl md:text-5xl font-extrabold leading-tight hero-title-glow"
@@ -36,35 +106,87 @@
                   profile?.created_at ? formatDate(profile.created_at) : "-"
                 }}</span>
               </p>
+              <p v-if="avatarError" class="text-xs text-red-400 mt-1">
+                {{ avatarError }}
+              </p>
             </div>
           </div>
 
           <div class="flex items-center gap-4">
-            <div v-if="editing" class="flex items-center gap-2">
-              <input
-                v-model="editUsername"
-                placeholder="Nom d'utilisateur"
-                class="px-3 py-2 rounded-md bg-zinc-800 border border-gray-700 text-white focus:outline-none"
-              />
-              <button
-                @click="saveProfile"
-                class="px-4 py-2 bg-MyPink text-white rounded-md hover:scale-105 transition-transform"
-              >
-                Enregistrer
-              </button>
-              <button
-                @click="cancelEdit"
-                class="px-3 py-2 text-gray-300 rounded-md hover:bg-gray-800/30"
-              >
-                Annuler
-              </button>
+            <div v-if="editing" class="flex flex-col gap-2">
+              <div class="flex items-center gap-2">
+                <input
+                  v-model="editUsername"
+                  placeholder="Nom d'utilisateur"
+                  class="px-3 py-2 rounded-md bg-zinc-800 border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-MyPink/50"
+                  @keyup.enter="saveProfile"
+                />
+                <button
+                  @click="saveProfile"
+                  class="px-4 py-2 bg-MyPink text-white rounded-md hover:scale-105 transition-transform"
+                >
+                  Enregistrer
+                </button>
+                <button
+                  @click="cancelEdit"
+                  class="px-3 py-2 text-gray-300 rounded-md hover:bg-gray-800/30"
+                >
+                  Annuler
+                </button>
+              </div>
+              <p v-if="saveError" class="text-red-400 text-sm">
+                {{ saveError }}
+              </p>
             </div>
-            <div v-else>
+            <div v-else class="flex items-center gap-3">
               <button
                 @click="startEdit"
                 class="px-4 py-2 bg-gradient-to-r from-MyPink to-MyBlue text-white rounded-lg transition-transform hover:scale-105"
               >
                 Éditer le profil
+              </button>
+              <button
+                @click="handleLogout"
+                :disabled="isLoggingOut"
+                class="px-4 py-2 bg-zinc-800 hover:bg-red-500/20 text-zinc-400 hover:text-red-400 rounded-lg transition-all border border-zinc-700 hover:border-red-500/50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <svg
+                  v-if="isLoggingOut"
+                  class="animate-spin h-4 w-4"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    class="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    stroke-width="4"
+                  />
+                  <path
+                    class="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
+                </svg>
+                <svg
+                  v-else
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                  />
+                </svg>
+                {{ isLoggingOut ? "Déconnexion..." : "Se déconnecter" }}
               </button>
             </div>
           </div>
@@ -446,7 +568,57 @@ definePageMeta({
 });
 
 const router = useRouter();
-const { user, profile, updateProfile, fetchProfile } = useAuth();
+const {
+  user,
+  profile,
+  updateProfile,
+  fetchProfile,
+  signOut,
+  ensureProfile,
+  uploadAvatar,
+} = useAuth();
+
+// État de la déconnexion
+const isLoggingOut = ref(false);
+const saveError = ref<string | null>(null);
+
+// État de l'upload d'avatar
+const uploadingAvatar = ref(false);
+const avatarError = ref<string | null>(null);
+
+// Fonction d'upload d'avatar
+const handleAvatarUpload = async (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+
+  if (!file) return;
+
+  uploadingAvatar.value = true;
+  avatarError.value = null;
+
+  const { error } = await uploadAvatar(file);
+
+  if (error) {
+    avatarError.value = error.message;
+  }
+
+  uploadingAvatar.value = false;
+
+  // Reset l'input pour permettre de re-sélectionner le même fichier
+  input.value = "";
+};
+
+// Fonction de déconnexion
+const handleLogout = async () => {
+  isLoggingOut.value = true;
+  try {
+    await signOut();
+    router.push("/login");
+  } catch (error) {
+    console.error("Erreur lors de la déconnexion:", error);
+    isLoggingOut.value = false;
+  }
+};
 
 // Display helpers
 const userDisplayName = computed(() => {
@@ -483,20 +655,37 @@ const startEdit = () => {
 const cancelEdit = () => {
   editing.value = false;
   editUsername.value = profile.value?.username || "";
+  saveError.value = null;
 };
 
 const saveProfile = async () => {
+  saveError.value = null;
+
+  if (!editUsername.value.trim()) {
+    saveError.value = "Le nom d'utilisateur ne peut pas être vide";
+    return;
+  }
+
   try {
-    const { error } = await updateProfile({ username: editUsername.value });
+    // S'assurer que le profil existe avant de le mettre à jour
+    if (!profile.value) {
+      await ensureProfile();
+    }
+
+    const { error } = await updateProfile({
+      username: editUsername.value.trim(),
+    });
     if (error) {
       console.error("Erreur updateProfile:", error);
+      saveError.value = error.message || "Erreur lors de la mise à jour";
       return;
     }
     // refresh local profile
     await fetchProfile();
     editing.value = false;
-  } catch (e) {
+  } catch (e: any) {
     console.error(e);
+    saveError.value = e.message || "Une erreur inattendue s'est produite";
   }
 };
 const {
@@ -525,6 +714,10 @@ const selectedGameFilter = ref<GameId | "">("");
 
 // Charger les données au montage
 onMounted(async () => {
+  // S'assurer qu'un profil existe (important pour les utilisateurs OAuth)
+  if (!profile.value) {
+    await ensureProfile();
+  }
   await Promise.all([fetchStats(), fetchSessions()]);
 });
 

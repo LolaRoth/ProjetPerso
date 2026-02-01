@@ -34,8 +34,8 @@ export default defineNuxtRouteMiddleware(async () => {
     });
   }
 
-  // Si déjà authentifié, rediriger vers le profil
+  // Si déjà authentifié, rediriger vers la page de bienvenue
   if (isAuthenticated.value) {
-    return navigateTo("/profile");
+    return navigateTo("/welcome");
   }
 });

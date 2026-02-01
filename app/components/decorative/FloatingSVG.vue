@@ -38,6 +38,7 @@ const elementStyle = computed(() => {
   const deg = level.value;
   const isLeft = props.position === "left";
 
+  // Plus visible pendant le chaos au lieu de disparaître
   return {
     width: `${props.size}px`,
     height: `${props.size}px`,
@@ -46,14 +47,14 @@ const elementStyle = computed(() => {
     transform: `
       translate(${baseOffset.value.x}px, ${baseOffset.value.y}px)
       rotate(${rotation.value}deg)
-      scale(${1 - deg * 0.2})
+      scale(${1 + deg * 0.3})
     `,
     filter: `
-      blur(${deg * 3}px)
-      saturate(${1 - deg * 0.3})
-      opacity(${Math.max(0.2, 0.7 - deg * 0.4)})
+      blur(${Math.max(0, deg * 1.5 - 0.5)}px)
+      saturate(${1 + deg * 0.5})
+      hue-rotate(${deg * 45}deg)
     `,
-    opacity: Math.max(0.15, 0.5 - deg * 0.3),
+    opacity: Math.min(0.9, 0.4 + deg * 0.5),
   };
 });
 

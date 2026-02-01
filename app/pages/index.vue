@@ -6,6 +6,11 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from "vue";
 import type { GameId } from "../../types/supabase";
 
+// Protection de la route - authentification obligatoire
+definePageMeta({
+  middleware: ["auth"],
+});
+
 const nuxtApp = useNuxtApp();
 const router = useRouter();
 const gsap = nuxtApp.$gsap as any;
@@ -47,6 +52,10 @@ const secretButtonPosition = ref({ x: 50, y: 50 });
 const showHint = ref(false);
 const hintsUsed = ref(0);
 
+// ===== PAPILLON QUI VOLE PENDANT LE SCROLL =====
+const butterflyProgress = ref(0);
+const butterflyVisible = ref(false);
+
 // ===== CURSOR REVEAL EFFECT (Background reveal through mask) =====
 interface RevealCircle {
   id: number;
@@ -74,29 +83,8 @@ const mouseBlobs = ref<
 let mouseBlobId = 0;
 
 const addMouseBlob = (x: number, y: number) => {
-  // Use the smooth interpolated cursor color for blobs
-  const color = cursorSmooth.str || "#FF66C8";
-  // Cartoon-style larger soft glow but subtle
-  const size = 36 + Math.random() * 28 + degradation.level * 30;
-
-  const id = mouseBlobId++;
-  // keep single visible blob (replace previous)
-  mouseBlobs.value = [{ id, x, y, color, size, opacity: 0.8 }];
-
-  // smoother fade out
-  setTimeout(
-    () => {
-      const b = mouseBlobs.value.find((m) => m.id === id);
-      if (b) b.opacity = 0.45;
-    },
-    420 + Math.random() * 300,
-  );
-  setTimeout(
-    () => {
-      mouseBlobs.value = mouseBlobs.value.filter((m) => m.id !== id);
-    },
-    1100 + Math.random() * 500,
-  );
+  // Désactivé - plus de cercle coloré sous la souris
+  return;
 };
 
 // ===== PARTICLES (used for target hits and puzzle confetti) =====
@@ -243,79 +231,79 @@ const revealMaskPath = computed(() => {
 
 const addRevealCircle = (x: number, y: number) => {
   const now = Date.now();
-  if (now - lastRevealTime < 15) return;
+  if (now - lastRevealTime < 30) return; // Plus lent pour garder le noir plus longtemps
   lastRevealTime = now;
 
-  const baseSize = 30 + degradation.level * 40;
+  // Taille plus petite pour révéler moins de couleur
+  const baseSize = 15 + degradation.level * 25;
 
   // Keep only a single reveal circle that follows the cursor
   const id = revealIdCounter++;
-  revealCircles.value = [{ id, x, y, size: baseSize, opacity: 1 }];
+  revealCircles.value = [{ id, x, y, size: baseSize, opacity: 0.7 }];
 };
 
-// ===== DEGRADATION SYSTEM (SLOWER) =====
+// ===== DEGRADATION SYSTEM (utilise le composable global) =====
+const {
+  level: degradationLevel,
+  phase: degradationPhase,
+  scrollLoops,
+  factors: degradationFactors,
+  thresholds: degradationThresholds,
+  isTransitioning: degradationTransitioning,
+  updateScroll,
+  addInteraction,
+  startTimeTracking,
+  stopTimeTracking,
+  completeCycle,
+  timeSpent: degradationTimeSpent,
+} = useDegradation();
+
+// Objet de compatibilité pour le code existant
 const degradation = reactive({
-  level: 0,
+  get level() {
+    return degradationLevel.value;
+  },
+  set level(_v) {
+    /* read-only */
+  },
   cycles: 0,
-  scrollProgress: 0,
-  timeSpent: 0,
+  get scrollProgress() {
+    return 0;
+  },
+  get timeSpent() {
+    return degradationTimeSpent.value;
+  },
   interactions: 0,
   clicks: 0,
   puzzlesSolved: 0,
-  phase: "pristine" as
-    | "pristine"
-    | "stable"
-    | "unstable"
-    | "chaotic"
-    | "broken",
+  get phase() {
+    return degradationPhase.value;
+  },
 });
 
-const getPhase = (level: number) => {
-  if (level < 0.15) return "pristine";
-  if (level < 0.35) return "stable";
-  if (level < 0.55) return "unstable";
-  if (level < 0.8) return "chaotic";
-  return "broken";
-};
-
-// Calcul plus lent de la dégradation
+// calculateLevel est maintenant géré par le composable
 const calculateLevel = () => {
-  const scrollFactor = degradation.scrollProgress * 0.35;
-  const timeFactor = Math.min(degradation.timeSpent / 300, 0.15);
-  const interactionFactor = Math.min(degradation.interactions / 200, 0.1);
-  const clickFactor = Math.min(degradation.clicks / 50, 0.08);
-  const cycleBonus = degradation.cycles * 0.08;
-  const puzzleBonus = degradation.puzzlesSolved * 0.05;
-
-  degradation.level = Math.min(
-    cycleBonus +
-      scrollFactor +
-      timeFactor +
-      interactionFactor +
-      clickFactor +
-      puzzleBonus,
-    1,
-  );
-  degradation.phase = getPhase(degradation.level);
-
-  // Révéler le bouton secret quand on est dans le chaos
-  if (degradation.level > 0.7 && !secretButtonVisible.value) {
+  // Le niveau est calculé automatiquement par useDegradation
+  // Révéler le bouton secret quand on atteint 30% de dégradation
+  if (degradationLevel.value > 0.3 && !secretButtonVisible.value) {
     secretButtonVisible.value = true;
+    // Position en pixels par rapport au site (pas à l'écran)
+    // Le site fait environ 10000px de haut, on place le bouton quelque part dedans
     secretButtonPosition.value = {
-      x: 10 + Math.random() * 80,
-      y: 10 + Math.random() * 80,
+      x: 20 + Math.random() * 60, // % horizontal
+      y: 2000 + Math.random() * 6000, // pixels depuis le haut du site
     };
   }
 };
 
-const updateScroll = (progress: number) => {
-  degradation.scrollProgress = progress;
+// Observer les changements de niveau pour déclencher les effets
+watch(degradationLevel, () => {
   calculateLevel();
-};
+});
 
-const addInteraction = (amount: number = 1) => {
-  degradation.interactions += amount;
-  calculateLevel();
+const addClick = () => {
+  degradation.clicks++;
+  addInteraction(1);
 };
 
 // Scroll to a game section by id (smooth)
@@ -325,11 +313,6 @@ const scrollToSection = (id: string) => {
   if (!el) return;
   el.scrollIntoView({ behavior: "smooth", block: "start" });
   addInteraction(1);
-};
-
-const addClick = () => {
-  degradation.clicks++;
-  calculateLevel();
 };
 
 // ===== DYNAMIC ELEMENTS (appear/change with degradation) =====
@@ -361,6 +344,68 @@ interface WarningMessage {
 
 const glitchTexts = ref<GlitchText[]>([]);
 const floatingShapes = ref<FloatingShape[]>([]);
+// Decorative sprites that cover the whole viewport (rects, stars, circles, etc.)
+interface DecorativeSprite {
+  id: number;
+  type: "rect" | "circle" | "star" | "diamond" | "plus" | "triangle";
+  x: number;
+  y: number;
+  size: number;
+  color: string;
+  rotation: number;
+  vx: number; // horizontal velocity in % per tick
+  vy: number; // vertical velocity in % per tick
+}
+
+const decorativeSprites = ref<DecorativeSprite[]>([]);
+
+const initDecorativeSprites = (count = 36) => {
+  const types: DecorativeSprite["type"][] = [
+    "rect",
+    "circle",
+    "star",
+    "diamond",
+    "plus",
+    "triangle",
+  ];
+  decorativeSprites.value = Array.from({ length: count }, (_, i) => {
+    const size = 8 + Math.random() * 48;
+    const vx = (Math.random() * 0.2 - 0.1) * (1 + size / 40); // small horizontal drift
+    const vy = (Math.random() * 0.2 - 0.05) * (1 + size / 60); // small vertical drift
+    const typeIndex = Math.floor(Math.random() * types.length);
+    return {
+      id: Date.now() + i,
+      type: types[typeIndex] ?? "circle",
+      x: Math.random() * 100,
+      y: Math.random() * 100,
+      size,
+      color:
+        cursorColors[Math.floor(Math.random() * cursorColors.length)] ||
+        "#FF66C8",
+      rotation: Math.random() * 360,
+      vx,
+      vy,
+    };
+  });
+};
+
+let decorativeInterval: ReturnType<typeof setInterval> | null = null;
+
+const animateDecorativeSprites = () => {
+  decorativeSprites.value.forEach((s) => {
+    // movement affected by degradation level
+    const factor = 1 + degradationLevel.value * 1.5;
+    s.x += s.vx * factor;
+    s.y += s.vy * factor;
+    s.rotation += 0.2 * (s.vx + s.vy) * factor;
+
+    // Wrap around the viewport bounds (0..100)
+    if (s.x < -10) s.x = 110;
+    if (s.x > 110) s.x = -10;
+    if (s.y < -10) s.y = 110;
+    if (s.y > 110) s.y = -10;
+  });
+};
 const warningMessages = ref<WarningMessage[]>([
   { id: 1, text: "⚠️ SYSTÈME INSTABLE", visible: false },
   { id: 2, text: "🔥 SURCHAUFFE DÉTECTÉE", visible: false },
@@ -651,29 +696,34 @@ const handleSequenceClick = (color: string, index: number) => {
 
 // ===== INTERACTIVE: Click Counter Challenge =====
 const clickChallenge = ref({
-  target: 0,
+  target: 20,
   current: 0,
   active: false,
-  timeLeft: 0,
+  started: false, // Timer démarre uniquement au premier clic
+  timeLeft: 5,
 });
 let clickChallengeInterval: ReturnType<typeof setInterval> | null = null;
 
-const startClickChallenge = () => {
-  if (clickChallenge.value.active) return;
-
+const prepareClickChallenge = () => {
+  // Prépare le jeu mais ne démarre pas le timer
   clickChallenge.value = {
     target: 15 + Math.floor(degradation.level * 20),
     current: 0,
     active: true,
+    started: false,
     timeLeft: 5,
   };
+};
+
+const startClickChallengeTimer = () => {
+  if (clickChallenge.value.started) return;
+  clickChallenge.value.started = true;
 
   clickChallengeInterval = setInterval(() => {
     clickChallenge.value.timeLeft--;
     if (clickChallenge.value.timeLeft <= 0) {
       if (clickChallengeInterval) clearInterval(clickChallengeInterval);
       const won = clickChallenge.value.current >= clickChallenge.value.target;
-      // Enregistrer la session
       saveGameSession(
         "click-challenge",
         clickChallenge.value.current,
@@ -689,12 +739,17 @@ const startClickChallenge = () => {
         calculateLevel();
       }
       clickChallenge.value.active = false;
+      clickChallenge.value.started = false;
     }
   }, 1000);
 };
 
 const handleChallengeClick = () => {
   if (!clickChallenge.value.active) return;
+  // Démarre le timer au premier clic
+  if (!clickChallenge.value.started) {
+    startClickChallengeTimer();
+  }
   clickChallenge.value.current++;
   addInteraction(0.5);
 };
@@ -1467,7 +1522,8 @@ const handleReactionClick = () => {
 // ===== NEW GAME: Typing Challenge =====
 const typingGame = ref({
   active: false,
-  targetWord: "",
+  started: false, // Timer démarre uniquement à la première frappe
+  targetWord: "chaos",
   userInput: "",
   wordsCompleted: 0,
   timeLeft: 30,
@@ -1494,11 +1550,12 @@ const typingWords = [
 
 let typingInterval: ReturnType<typeof setInterval> | null = null;
 
-const startTypingGame = () => {
+const prepareTypingGame = () => {
   if (typingGame.value.active) return;
 
   typingGame.value = {
     active: true,
+    started: false,
     targetWord:
       typingWords[Math.floor(Math.random() * typingWords.length)] || "chaos",
     userInput: "",
@@ -1506,6 +1563,11 @@ const startTypingGame = () => {
     timeLeft: 30,
     score: 0,
   };
+};
+
+const startTypingGameTimer = () => {
+  if (typingGame.value.started) return;
+  typingGame.value.started = true;
 
   typingInterval = setInterval(() => {
     typingGame.value.timeLeft--;
@@ -1518,6 +1580,11 @@ const startTypingGame = () => {
 const handleTypingInput = (e: Event) => {
   const target = e.target as HTMLInputElement;
   typingGame.value.userInput = target.value;
+
+  // Démarre le timer à la première frappe
+  if (!typingGame.value.started && typingGame.value.userInput.length > 0) {
+    startTypingGameTimer();
+  }
 
   if (
     typingGame.value.userInput.toLowerCase() ===
@@ -1550,11 +1617,97 @@ const endTypingGame = () => {
   );
 
   typingGame.value.active = false;
+  typingGame.value.started = false;
 
   if (won) {
     degradation.puzzlesSolved++;
     calculateLevel();
   }
+};
+
+// ===== NEW GAME: Fake Victory Button (Troll Game) =====
+const fakeButton = reactive({
+  x: 50,
+  y: 50,
+  attempts: 0,
+  escaped: false,
+});
+
+const fakeButtonMessages = [
+  "GAGNER",
+  "Clique ici",
+  "Non, ici",
+  "Raté",
+  "Trop lent",
+  "Encore essaye...",
+  "Tu y es presque",
+  "Ou pas",
+  "Continue...",
+  "Abandonne pas",
+  "Haha",
+  "Impossible",
+  "Peut-être...",
+  "Non",
+];
+
+const currentFakeMessage = computed(() => {
+  if (fakeButton.attempts === 0) return "GAGNER";
+  return (
+    fakeButtonMessages[
+      Math.min(fakeButton.attempts, fakeButtonMessages.length - 1)
+    ] || ""
+  );
+});
+
+const handleFakeButtonHover = () => {
+  // Move button to a random position when user tries to hover/click
+  fakeButton.attempts++;
+  addInteraction(2);
+
+  // Calculate new random position (keeping button within bounds)
+  const newX = 10 + Math.random() * 80;
+  const newY = 20 + Math.random() * 60;
+
+  fakeButton.x = newX;
+  fakeButton.y = newY;
+
+  // After many attempts, add bonus degradation
+  if (fakeButton.attempts >= 10 && fakeButton.attempts % 5 === 0) {
+    degradation.puzzlesSolved += 0.5;
+    calculateLevel();
+  }
+};
+
+// When user actually clicks the button: increase chaos irreversibly
+const handleFakeButtonClick = () => {
+  // Track the click as an attempt too
+  fakeButton.attempts++;
+
+  // Add strong interaction weight so chaos increases and can't be undone
+  addInteraction(10);
+
+  // Increase persistent counters used by calculateLevel
+  degradation.cycles += 3; // gives a visible cycle bonus
+  degradation.interactions += 20;
+  degradation.clicks += 10;
+  degradation.puzzlesSolved += 1;
+
+  // Slightly move the button to avoid immediate re-click
+  fakeButton.x = 10 + Math.random() * 80;
+  fakeButton.y = 20 + Math.random() * 60;
+
+  // Visual feedback: spawn some particles near center
+  try {
+    spawnParticles(
+      window.innerWidth / 2,
+      window.innerHeight / 2,
+      "#BBFF42",
+      18,
+    );
+  } catch (e) {}
+
+  // Recalculate level (will reflect the increases above)
+  calculateLevel();
 };
 
 // ===== INTERACTIVE: Target Shooting (AMÉLIIORÉ) =====
@@ -1571,6 +1724,7 @@ interface Target {
 const targets = ref<Target[]>([]);
 const targetGame = ref({
   active: false,
+  started: false, // Timer démarre au premier clic sur une cible
   score: 0,
   missed: 0,
   combo: 0,
@@ -1608,11 +1762,14 @@ const getDifficultySettings = () => {
   return settings[targetGame.value.difficulty];
 };
 
-const startTargetGame = (difficulty: "easy" | "normal" | "hard" = "normal") => {
+const prepareTargetGame = (
+  difficulty: "easy" | "normal" | "hard" = "normal",
+) => {
   if (targetGame.value.active) return;
 
   targetGame.value = {
     active: true,
+    started: false,
     score: 0,
     missed: 0,
     combo: 0,
@@ -1623,6 +1780,16 @@ const startTargetGame = (difficulty: "easy" | "normal" | "hard" = "normal") => {
     difficulty,
   };
   targets.value = [];
+
+  // Spawn quelques cibles pour montrer le jeu
+  for (let i = 0; i < 3; i++) {
+    spawnGameTarget();
+  }
+};
+
+const startTargetGameTimer = () => {
+  if (targetGame.value.started) return;
+  targetGame.value.started = true;
 
   const settings = getDifficultySettings();
 
@@ -1638,9 +1805,6 @@ const startTargetGame = (difficulty: "easy" | "normal" | "hard" = "normal") => {
   targetGameSpawnInterval = setInterval(() => {
     spawnGameTarget();
   }, settings.spawnRate);
-
-  // Spawn first target immediately
-  spawnGameTarget();
 };
 
 const spawnGameTarget = () => {
@@ -1680,6 +1844,11 @@ const spawnGameTarget = () => {
 const hitTarget = (id: number) => {
   const target = targets.value.find((t) => t.id === id);
   if (!target || target.hit) return;
+
+  // Démarre le timer au premier clic sur une cible
+  if (!targetGame.value.started) {
+    startTargetGameTimer();
+  }
 
   target.hit = true;
 
@@ -1787,6 +1956,11 @@ const handleSecretClick = async () => {
   if (!gameWon.value) {
     gameWon.value = true;
 
+    // Save time spent to localStorage for the fin page
+    try {
+      localStorage.setItem("chaosTimeSpent", String(degradation.timeSpent));
+    } catch (e) {}
+
     // Save the win session
     await saveGameSession(
       "secret-button",
@@ -1801,7 +1975,7 @@ const handleSecretClick = async () => {
       },
     );
 
-    // Brief flash animation then redirect
+    // Brief flash animation then redirect to fin page
     if (gsap) {
       gsap.to("body", {
         backgroundColor: "#fff",
@@ -1820,6 +1994,11 @@ const handleSecretClick = async () => {
 };
 
 const showHintFn = () => {
+  // debug log to confirm invocation
+  try {
+    // eslint-disable-next-line no-console
+    console.log("showHintFn invoked");
+  } catch (e) {}
   showHint.value = true;
   hintsUsed.value++;
   setTimeout(() => {
@@ -1832,6 +2011,25 @@ const reloadPage = () => {
     window.location.reload();
   }
 };
+
+// Global shortcut for hint (press 'h' or 'H') to help debugging and accessibility
+onMounted(() => {
+  const onKey = (e: KeyboardEvent) => {
+    const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+    // ignore when typing in inputs or textareas
+    if (
+      tag === "input" ||
+      tag === "textarea" ||
+      (e.target as HTMLElement)?.isContentEditable
+    )
+      return;
+    if (e.key === "i" || e.key === "I") {
+      showHintFn();
+    }
+  };
+  window.addEventListener("keydown", onKey);
+  onUnmounted(() => window.removeEventListener("keydown", onKey));
+});
 
 // ===== HIDDEN CATCH GAME (in horizontal scroll) =====
 interface FallingStar {
@@ -2077,14 +2275,13 @@ onMounted(async () => {
   await nextTick();
 
   initFallingElements();
+  initDecorativeSprites();
 
   window.addEventListener("mousemove", handleMouseMove);
   window.addEventListener("click", addClick);
 
-  timeInterval = setInterval(() => {
-    degradation.timeSpent++;
-    calculateLevel();
-  }, 1000);
+  // Démarrer le tracking du temps via le composable
+  startTimeTracking();
 
   fallInterval = setInterval(triggerFall, 800);
 
@@ -2093,6 +2290,7 @@ onMounted(async () => {
 
   // Animate floating shapes
   floatingAnimationInterval = setInterval(animateFloatingShapes, 50);
+  decorativeInterval = setInterval(animateDecorativeSprites, 60);
 
   if (ScrollTrigger) {
     ScrollTrigger.create({
@@ -2101,6 +2299,24 @@ onMounted(async () => {
       end: "bottom bottom",
       scrub: 0.3,
       onUpdate: (self: any) => updateScroll(self.progress),
+    });
+
+    // Animation du papillon qui traverse l'écran pendant le scroll
+    ScrollTrigger.create({
+      trigger: document.body,
+      start: "15% top",
+      end: "45% top",
+      scrub: 1,
+      onUpdate: (self: any) => {
+        butterflyProgress.value = self.progress;
+        butterflyVisible.value = self.progress > 0.01 && self.progress < 0.99;
+      },
+      onLeave: () => {
+        butterflyVisible.value = false;
+      },
+      onEnterBack: () => {
+        butterflyVisible.value = true;
+      },
     });
   }
 
@@ -2175,6 +2391,7 @@ onUnmounted(() => {
   if (clickChallengeInterval) clearInterval(clickChallengeInterval);
   if (dynamicElementsInterval) clearInterval(dynamicElementsInterval);
   if (floatingAnimationInterval) clearInterval(floatingAnimationInterval);
+  if (decorativeInterval) clearInterval(decorativeInterval);
   if (typingInterval) clearInterval(typingInterval);
   if (reactionTimeout) clearTimeout(reactionTimeout);
   if (memoryTimerInterval) clearInterval(memoryTimerInterval);
@@ -2187,6 +2404,9 @@ onUnmounted(() => {
   // cleanup cursor loop and native cursor class
   stopCursorLoop();
   document.body.classList.remove("hide-native-cursor");
+
+  // Arrêter le tracking de la dégradation
+  stopTimeTracking();
 });
 </script>
 
@@ -2196,6 +2416,430 @@ onUnmounted(() => {
     class="relative min-h-screen overflow-hidden bg-MyBlack text-white"
     :style="backgroundStyle"
   >
+    <!-- FLOATING SVG DECORATIONS (visible pendant le chaos) -->
+    <DecorativeFloatingSVG
+      src="/svg/flower-cartoon.svg"
+      position="left"
+      :top="20"
+      :size="120"
+      :float-amplitude="20"
+      :float-speed="0.8"
+    />
+    <DecorativeFloatingSVG
+      src="/svg/phone-cartoon.svg"
+      position="right"
+      :top="35"
+      :size="100"
+      :float-amplitude="15"
+      :float-speed="1.2"
+    />
+    <DecorativeFloatingSVG
+      src="/svg/flower-cart.svg"
+      position="left"
+      :top="60"
+      :size="90"
+      :float-amplitude="18"
+      :float-speed="0.6"
+    />
+    <DecorativeFloatingSVG
+      src="/svg/tel-cart.svg"
+      position="right"
+      :top="75"
+      :size="110"
+      :float-amplitude="12"
+      :float-speed="1"
+    />
+
+    <!-- FLOATING GEOMETRIC SHAPES (plus de formes décoratives) -->
+    <div class="pointer-events-none fixed inset-0 z-[5] overflow-hidden">
+      <!-- Dynamic decorative sprites covering the whole viewport -->
+      <div
+        v-for="s in decorativeSprites"
+        :key="`decor-${s.id}`"
+        class="absolute"
+        :style="{
+          left: `${s.x}%`,
+          top: `${s.y}%`,
+          width: `${s.size}px`,
+          height: `${s.size}px`,
+          transform: `translate(-50%, -50%) rotate(${s.rotation}deg) scale(${1 + degradationLevel * 0.6})`,
+          opacity: 0.15 + degradationLevel * 0.6,
+          color: s.color,
+          filter: `drop-shadow(0 0 ${12 * degradationLevel}px ${s.color}) hue-rotate(${degradationLevel * 140}deg)`,
+        }"
+      >
+        <template v-if="s.type === 'rect'">
+          <div
+            :style="{
+              backgroundColor: s.color,
+              width: '100%',
+              height: '100%',
+              borderRadius: '6px',
+            }"
+          />
+        </template>
+        <template v-else-if="s.type === 'circle'">
+          <div
+            :style="{
+              backgroundColor: s.color,
+              width: '100%',
+              height: '100%',
+              borderRadius: '50%',
+            }"
+          />
+        </template>
+        <template v-else-if="s.type === 'star'">
+          <div
+            class="text-center"
+            :style="{ fontSize: `${s.size}px`, lineHeight: 1 }"
+          >
+            ★
+          </div>
+        </template>
+        <template v-else-if="s.type === 'diamond'">
+          <div
+            :style="{
+              width: '100%',
+              height: '100%',
+              backgroundColor: s.color,
+              transform: 'rotate(45deg)',
+            }"
+          />
+        </template>
+        <template v-else-if="s.type === 'plus'">
+          <div
+            class="text-center"
+            :style="{ fontSize: `${s.size}px`, lineHeight: 1 }"
+          >
+            +
+          </div>
+        </template>
+        <template v-else-if="s.type === 'triangle'">
+          <div
+            :style="{
+              width: 0,
+              height: 0,
+              borderLeft: `${s.size / 2}px solid transparent`,
+              borderRight: `${s.size / 2}px solid transparent`,
+              borderBottom: `${s.size}px solid ${s.color}`,
+            }"
+          />
+        </template>
+      </div>
+      <!-- Étoiles -->
+      <div
+        class="absolute text-4xl animate-float-slow"
+        :style="{
+          left: '5%',
+          top: '15%',
+          opacity: 0.3 + degradationLevel * 0.4,
+          filter: `hue-rotate(${degradationLevel * 90}deg)`,
+        }"
+      >
+        ⭐
+      </div>
+      <div
+        class="absolute text-3xl animate-float-slow-reverse"
+        :style="{
+          right: '8%',
+          top: '25%',
+          opacity: 0.25 + degradationLevel * 0.5,
+          filter: `hue-rotate(${degradationLevel * 120}deg)`,
+          animationDelay: '1s',
+        }"
+      >
+        ✨
+      </div>
+      <div
+        class="absolute text-5xl animate-breathe"
+        :style="{
+          left: '3%',
+          top: '45%',
+          opacity: 0.2 + degradationLevel * 0.4,
+          filter: `hue-rotate(${degradationLevel * 60}deg)`,
+        }"
+      >
+        🌟
+      </div>
+      <div
+        class="absolute text-2xl animate-float-slow"
+        :style="{
+          right: '4%',
+          top: '55%',
+          opacity: 0.3 + degradationLevel * 0.35,
+          filter: `hue-rotate(${degradationLevel * 150}deg)`,
+          animationDelay: '2s',
+        }"
+      >
+        💫
+      </div>
+      <div
+        class="absolute text-4xl animate-parallax-float"
+        :style="{
+          left: '6%',
+          top: '80%',
+          opacity: 0.25 + degradationLevel * 0.45,
+          filter: `hue-rotate(${degradationLevel * 180}deg)`,
+        }"
+      >
+        ⭐
+      </div>
+
+      <!-- Rectangles colorés -->
+      <div
+        class="absolute w-8 h-16 rounded-sm animate-float-slow"
+        :style="{
+          left: '2%',
+          top: '30%',
+          backgroundColor: `rgba(255, 102, 200, ${0.15 + degradationLevel * 0.4})`,
+          transform: `rotate(${15 + degradationLevel * 45}deg) scale(${1 + degradationLevel * 0.5})`,
+          boxShadow: `0 0 ${20 * degradationLevel}px rgba(255, 102, 200, 0.5)`,
+        }"
+      />
+      <div
+        class="absolute w-6 h-20 rounded-sm animate-float-slow-reverse"
+        :style="{
+          right: '3%',
+          top: '40%',
+          backgroundColor: `rgba(107, 255, 255, ${0.12 + degradationLevel * 0.35})`,
+          transform: `rotate(${-20 + degradationLevel * 60}deg) scale(${1 + degradationLevel * 0.4})`,
+          animationDelay: '1.5s',
+          boxShadow: `0 0 ${15 * degradationLevel}px rgba(107, 255, 255, 0.5)`,
+        }"
+      />
+      <div
+        class="absolute w-10 h-24 rounded-sm animate-breathe"
+        :style="{
+          left: '4%',
+          top: '70%',
+          backgroundColor: `rgba(255, 247, 70, ${0.1 + degradationLevel * 0.3})`,
+          transform: `rotate(${30 + degradationLevel * 30}deg) scale(${1 + degradationLevel * 0.6})`,
+          boxShadow: `0 0 ${25 * degradationLevel}px rgba(255, 247, 70, 0.4)`,
+        }"
+      />
+      <div
+        class="absolute w-5 h-14 rounded-sm animate-parallax-float"
+        :style="{
+          right: '5%',
+          top: '65%',
+          backgroundColor: `rgba(187, 255, 66, ${0.15 + degradationLevel * 0.4})`,
+          transform: `rotate(${-10 + degradationLevel * 50}deg) scale(${1 + degradationLevel * 0.3})`,
+          animationDelay: '0.5s',
+          boxShadow: `0 0 ${18 * degradationLevel}px rgba(187, 255, 66, 0.5)`,
+        }"
+      />
+
+      <!-- Cercles / Bulles -->
+      <div
+        class="absolute w-12 h-12 rounded-full animate-float-slow"
+        :style="{
+          left: '7%',
+          top: '10%',
+          backgroundColor: `rgba(170, 102, 255, ${0.1 + degradationLevel * 0.35})`,
+          transform: `scale(${1 + degradationLevel * 0.8})`,
+          boxShadow: `0 0 ${30 * degradationLevel}px rgba(170, 102, 255, 0.4)`,
+        }"
+      />
+      <div
+        class="absolute w-8 h-8 rounded-full animate-breathe"
+        :style="{
+          right: '6%',
+          top: '18%',
+          backgroundColor: `rgba(255, 136, 85, ${0.15 + degradationLevel * 0.4})`,
+          transform: `scale(${1 + degradationLevel * 0.6})`,
+          animationDelay: '0.8s',
+          boxShadow: `0 0 ${20 * degradationLevel}px rgba(255, 136, 85, 0.5)`,
+        }"
+      />
+      <div
+        class="absolute w-16 h-16 rounded-full animate-float-slow-reverse"
+        :style="{
+          left: '1%',
+          top: '50%',
+          backgroundColor: `rgba(255, 102, 200, ${0.08 + degradationLevel * 0.3})`,
+          transform: `scale(${1 + degradationLevel * 1})`,
+          boxShadow: `0 0 ${35 * degradationLevel}px rgba(255, 102, 200, 0.3)`,
+        }"
+      />
+      <div
+        class="absolute w-10 h-10 rounded-full animate-parallax-float"
+        :style="{
+          right: '2%',
+          top: '85%',
+          backgroundColor: `rgba(107, 255, 255, ${0.12 + degradationLevel * 0.35})`,
+          transform: `scale(${1 + degradationLevel * 0.7})`,
+          animationDelay: '1.2s',
+          boxShadow: `0 0 ${25 * degradationLevel}px rgba(107, 255, 255, 0.4)`,
+        }"
+      />
+
+      <!-- Triangles (CSS borders) -->
+      <div
+        class="absolute animate-float-slow"
+        :style="{
+          left: '8%',
+          top: '35%',
+          width: 0,
+          height: 0,
+          borderLeft: '15px solid transparent',
+          borderRight: '15px solid transparent',
+          borderBottom: `30px solid rgba(255, 247, 70, ${0.2 + degradationLevel * 0.4})`,
+          transform: `rotate(${degradationLevel * 180}deg) scale(${1 + degradationLevel * 0.5})`,
+          filter: `drop-shadow(0 0 ${10 * degradationLevel}px rgba(255, 247, 70, 0.6))`,
+        }"
+      />
+      <div
+        class="absolute animate-breathe"
+        :style="{
+          right: '7%',
+          top: '50%',
+          width: 0,
+          height: 0,
+          borderLeft: '12px solid transparent',
+          borderRight: '12px solid transparent',
+          borderBottom: `24px solid rgba(187, 255, 66, ${0.18 + degradationLevel * 0.35})`,
+          transform: `rotate(${90 + degradationLevel * 120}deg) scale(${1 + degradationLevel * 0.6})`,
+          animationDelay: '0.7s',
+          filter: `drop-shadow(0 0 ${12 * degradationLevel}px rgba(187, 255, 66, 0.5))`,
+        }"
+      />
+      <div
+        class="absolute animate-float-slow-reverse"
+        :style="{
+          left: '5%',
+          top: '90%',
+          width: 0,
+          height: 0,
+          borderLeft: '18px solid transparent',
+          borderRight: '18px solid transparent',
+          borderBottom: `36px solid rgba(170, 102, 255, ${0.15 + degradationLevel * 0.4})`,
+          transform: `rotate(${-45 + degradationLevel * 90}deg) scale(${1 + degradationLevel * 0.4})`,
+          filter: `drop-shadow(0 0 ${15 * degradationLevel}px rgba(170, 102, 255, 0.5))`,
+        }"
+      />
+
+      <!-- Losanges (carrés tournés) -->
+      <div
+        class="absolute w-8 h-8 animate-parallax-float"
+        :style="{
+          right: '9%',
+          top: '12%',
+          backgroundColor: `rgba(255, 102, 200, ${0.12 + degradationLevel * 0.35})`,
+          transform: `rotate(${45 + degradationLevel * 90}deg) scale(${1 + degradationLevel * 0.5})`,
+          boxShadow: `0 0 ${18 * degradationLevel}px rgba(255, 102, 200, 0.4)`,
+        }"
+      />
+      <div
+        class="absolute w-6 h-6 animate-float-slow"
+        :style="{
+          left: '9%',
+          top: '58%',
+          backgroundColor: `rgba(107, 255, 255, ${0.15 + degradationLevel * 0.4})`,
+          transform: `rotate(${45 + degradationLevel * 120}deg) scale(${1 + degradationLevel * 0.6})`,
+          animationDelay: '1.8s',
+          boxShadow: `0 0 ${20 * degradationLevel}px rgba(107, 255, 255, 0.5)`,
+        }"
+      />
+      <div
+        class="absolute w-10 h-10 animate-breathe"
+        :style="{
+          right: '4%',
+          top: '78%',
+          backgroundColor: `rgba(255, 136, 85, ${0.1 + degradationLevel * 0.3})`,
+          transform: `rotate(${45 + degradationLevel * 60}deg) scale(${1 + degradationLevel * 0.4})`,
+          boxShadow: `0 0 ${22 * degradationLevel}px rgba(255, 136, 85, 0.4)`,
+        }"
+      />
+
+      <!-- Croix / Plus -->
+      <div
+        class="absolute text-3xl font-bold animate-float-slow-reverse"
+        :style="{
+          left: '3%',
+          top: '22%',
+          color: `rgba(255, 247, 70, ${0.25 + degradationLevel * 0.5})`,
+          transform: `rotate(${degradationLevel * 180}deg) scale(${1 + degradationLevel * 0.4})`,
+          textShadow: `0 0 ${15 * degradationLevel}px rgba(255, 247, 70, 0.6)`,
+        }"
+      >
+        +
+      </div>
+      <div
+        class="absolute text-4xl font-bold animate-breathe"
+        :style="{
+          right: '6%',
+          top: '68%',
+          color: `rgba(187, 255, 66, ${0.2 + degradationLevel * 0.45})`,
+          transform: `rotate(${45 + degradationLevel * 90}deg) scale(${1 + degradationLevel * 0.5})`,
+          animationDelay: '0.9s',
+          textShadow: `0 0 ${18 * degradationLevel}px rgba(187, 255, 66, 0.5)`,
+        }"
+      >
+        +
+      </div>
+
+      <!-- Hexagones (emojis) -->
+      <div
+        class="absolute text-3xl animate-parallax-float"
+        :style="{
+          left: '2%',
+          top: '40%',
+          opacity: 0.2 + degradationLevel * 0.4,
+          filter: `hue-rotate(${degradationLevel * 100}deg)`,
+        }"
+      >
+        ⬡
+      </div>
+      <div
+        class="absolute text-2xl animate-float-slow"
+        :style="{
+          right: '3%',
+          top: '32%',
+          opacity: 0.25 + degradationLevel * 0.45,
+          filter: `hue-rotate(${degradationLevel * 140}deg)`,
+          animationDelay: '1.3s',
+        }"
+      >
+        ⬢
+      </div>
+
+      <!-- Formes diverses -->
+      <div
+        class="absolute text-2xl animate-float-slow-reverse"
+        :style="{
+          left: '6%',
+          top: '85%',
+          opacity: 0.2 + degradationLevel * 0.4,
+          filter: `hue-rotate(${degradationLevel * 80}deg)`,
+        }"
+      >
+        ◆
+      </div>
+      <div
+        class="absolute text-3xl animate-breathe"
+        :style="{
+          right: '8%',
+          top: '92%',
+          opacity: 0.25 + degradationLevel * 0.35,
+          filter: `hue-rotate(${degradationLevel * 160}deg)`,
+          animationDelay: '0.6s',
+        }"
+      >
+        ○
+      </div>
+      <div
+        class="absolute text-2xl animate-parallax-float"
+        :style="{
+          left: '1%',
+          top: '95%',
+          opacity: 0.2 + degradationLevel * 0.45,
+          filter: `hue-rotate(${degradationLevel * 200}deg)`,
+        }"
+      >
+        ▲
+      </div>
+    </div>
+
     <!-- WIN OVERLAY -->
     <div
       v-if="gameWon"
@@ -2297,26 +2941,6 @@ onUnmounted(() => {
           </linearGradient>
         </defs>
       </svg>
-    </div>
-
-    <!-- MOUSE COLOR BLOBS (overlay) -->
-    <div class="pointer-events-none fixed inset-0 z-60">
-      <div
-        v-for="blob in mouseBlobs"
-        :key="`blob-${blob.id}`"
-        class="absolute rounded-full"
-        :style="{
-          left: `${blob.x}px`,
-          top: `${blob.y}px`,
-          width: `${blob.size}px`,
-          height: `${blob.size}px`,
-          transform: 'translate(-50%, -50%)',
-          background: `radial-gradient(circle at 30% 30%, ${blob.color} 0%, transparent 60%)`,
-          opacity: blob.opacity,
-          filter: 'blur(12px)',
-          mixBlendMode: 'screen',
-        }"
-      />
     </div>
 
     <!-- PARTICLES (hit/confetti) -->
@@ -2465,6 +3089,30 @@ onUnmounted(() => {
       </div>
     </div>
 
+    <!-- PAPILLON QUI TRAVERSE L'ÉCRAN PENDANT LE SCROLL (Indice discret) -->
+    <Transition name="butterfly">
+      <div
+        v-if="butterflyVisible"
+        class="fixed z-50 pointer-events-none select-none discrete-hint flex flex-col items-center"
+        :style="{
+          left: `${-10 + butterflyProgress * 120}%`,
+          top: `${30 + Math.sin(butterflyProgress * Math.PI * 3) * 25}%`,
+          transform: `rotate(${Math.sin(butterflyProgress * Math.PI * 4) * 15}deg) scale(${1 + Math.sin(butterflyProgress * Math.PI) * 0.3})`,
+          transition: 'opacity 0.5s ease',
+          filter: 'drop-shadow(0 0 20px rgba(255, 102, 200, 0.6))',
+        }"
+      >
+        <span
+          class="text-6xl md:text-7xl animate-float-slow"
+          style="display: block"
+          >🦋</span
+        >
+        <span class="text-MyPink font-bricolage text-sm mt-1 opacity-80"
+          >papillon</span
+        >
+      </div>
+    </Transition>
+
     <!-- SCREEN CRACKS (appear at 60%+) -->
     <div class="pointer-events-none fixed inset-0 z-25 overflow-hidden">
       <svg
@@ -2508,64 +3156,77 @@ onUnmounted(() => {
 
     <!-- DEGRADATION PHASE INDICATOR (new visual) -->
     <div
-      v-if="degradation.level > 0.4"
+      v-if="degradationLevel > 0.15"
       class="fixed bottom-4 left-4 z-50 pointer-events-none"
     >
       <div
-        class="px-3 py-1 rounded font-mono text-xs backdrop-blur-sm"
+        class="px-3 py-1.5 rounded font-mono text-xs backdrop-blur-sm border"
         :class="{
-          'bg-MyYellow/20 text-MyYellow': degradation.phase === 'stable',
-          'bg-MyPink/20 text-MyPink': degradation.phase === 'unstable',
-          'bg-MyBlue/20 text-MyBlue animate-pulse':
-            degradation.phase === 'chaotic',
-          'bg-red-500/20 text-red-500 animate-bounce':
-            degradation.phase === 'broken',
+          'bg-MyYellow/20 text-MyYellow border-MyYellow/30':
+            degradationPhase === 'glitching',
+          'bg-MyPink/20 text-MyPink border-MyPink/30':
+            degradationPhase === 'unstable',
+          'bg-MyBlue/20 text-MyBlue border-MyBlue/30 animate-pulse':
+            degradationPhase === 'chaotic',
+          'bg-red-500/20 text-red-500 border-red-500/30 animate-bounce':
+            degradationPhase === 'broken',
         }"
       >
-        <span v-if="degradation.phase === 'unstable'">⚠️ INSTABLE</span>
-        <span v-else-if="degradation.phase === 'chaotic'">🌀 CHAOTIQUE</span>
-        <span v-else-if="degradation.phase === 'broken'">💀 CRITIQUE</span>
+        <span v-if="degradationPhase === 'glitching'">⚡ GLITCH</span>
+        <span v-else-if="degradationPhase === 'unstable'">⚠️ INSTABLE</span>
+        <span v-else-if="degradationPhase === 'chaotic'">🌀 CHAOTIQUE</span>
+        <span v-else-if="degradationPhase === 'broken'">💀 CRITIQUE</span>
+        <!-- loop count removed -->
       </div>
     </div>
 
-    <!-- SECRET BUTTON -->
+    <!-- SECRET BUTTON - Positionné dans le contenu du site -->
     <button
       v-if="secretButtonVisible && !gameWon"
-      class="fixed z-[150] rounded-full transition-all duration-300 cursor-pointer secret-btn-glow"
+      class="absolute z-[100] rounded-full cursor-pointer"
       :class="{
-        'h-3 w-3': degradation.level < 0.8,
-        'h-5 w-5': degradation.level >= 0.8 && degradation.level < 0.95,
-        'h-8 w-8 animate-pulse': degradation.level >= 0.95,
+        'h-4 w-4': degradation.level < 0.7,
+        'h-5 w-5': degradation.level >= 0.7 && degradation.level < 0.85,
+        'h-6 w-6 animate-pulse': degradation.level >= 0.85,
       }"
       :style="{
         left: `${secretButtonPosition.x}%`,
-        top: `${secretButtonPosition.y}%`,
+        top: `${secretButtonPosition.y}px`,
         opacity:
-          degradation.level > 0.95
-            ? 1
-            : degradation.level > 0.85
-              ? 0.7
-              : degradation.level > 0.7
-                ? 0.3
-                : 0.1,
-        background: `radial-gradient(circle, ${degradation.level > 0.9 ? '#BBFF42' : '#BBFF42aa'} 0%, transparent 70%)`,
+          degradation.level > 0.85 ? 0.7 : degradation.level > 0.7 ? 0.4 : 0.2,
+        background:
+          'radial-gradient(circle, rgba(187, 255, 66, 0.9) 0%, rgba(187, 255, 66, 0.4) 60%, transparent 100%)',
         boxShadow:
-          degradation.level > 0.9
-            ? '0 0 20px #BBFF42, 0 0 40px #BBFF42aa, 0 0 60px #BBFF4266'
-            : 'none',
+          degradation.level > 0.8 ? '0 0 15px rgba(187, 255, 66, 0.6)' : 'none',
         transform: 'translate(-50%, -50%)',
       }"
       @click="handleSecretClick"
     />
 
     <!-- HINT -->
-    <div
-      v-if="showHint && secretButtonVisible"
-      class="fixed left-1/2 top-20 z-[160] -translate-x-1/2 rounded-xl bg-MyGreen/20 px-6 py-3 text-MyGreen font-bricolage backdrop-blur"
-    >
-      🔍 Le bouton est quelque part à {{ Math.round(secretButtonPosition.x) }}%
-      horizontal, {{ Math.round(secretButtonPosition.y) }}% vertical
-    </div>
+    <Transition name="hint-fade">
+      <div
+        v-if="showHint"
+        class="fixed left-1/2 bottom-20 z-[9999] -translate-x-1/2 rounded-xl bg-MyGreen/90 px-6 py-4 text-white font-bricolage backdrop-blur-md border border-MyGreen shadow-lg shadow-MyGreen/30"
+      >
+        <template v-if="secretButtonVisible">
+          🔍 Le bouton secret est à environ
+          <strong>{{ Math.round(secretButtonPosition.x) }}%</strong> depuis la
+          gauche, <br />à
+          <strong>{{ Math.round(secretButtonPosition.y) }}px</strong> depuis le
+          haut du site <br /><span class="text-sm opacity-80"
+            >(scrolle pour le trouver !)</span
+          >
+        </template>
+        <template v-else>
+          💡 Continue à interagir avec le site !
+          <br /><span class="text-sm opacity-80"
+            >Le bouton apparaîtra à {{ Math.round(degradation.level * 100) }}% /
+            30% de dégradation</span
+          >
+        </template>
+      </div>
+    </Transition>
 
     <!-- DEGRADATION INDICATOR -->
     <div class="fixed left-0 top-0 z-50 h-1.5 w-full bg-zinc-900/80">
@@ -2576,7 +3237,8 @@ onUnmounted(() => {
 
     <!-- HINT BUTTON -->
     <button
-      v-if="degradation.level > 0.5 && !gameWon"
+      v-show="!gameWon"
+      title="Afficher l'indice (touche H)"
       class="fixed left-4 top-4 z-50 rounded-lg bg-zinc-900/80 px-3 py-2 font-bricolage text-xs text-zinc-400 hover:text-MyYellow transition-colors border border-zinc-800"
       @click="showHintFn"
     >
@@ -2587,86 +3249,121 @@ onUnmounted(() => {
     <section
       class="relative flex min-h-screen flex-col items-center justify-center px-6 overflow-hidden"
     >
-      <!-- Animated background orbs for hero -->
+      <!-- Animated background orbs for hero with enhanced parallax -->
       <div class="absolute inset-0 pointer-events-none overflow-hidden">
         <div
-          class="absolute top-1/4 left-1/4 w-96 h-96 bg-MyPink/10 rounded-full blur-3xl animate-float-slow"
+          class="absolute top-1/4 left-1/4 w-96 h-96 bg-MyPink/10 rounded-full blur-3xl animate-parallax-float"
         />
         <div
           class="absolute bottom-1/4 right-1/4 w-80 h-80 bg-MyBlue/10 rounded-full blur-3xl animate-float-slow-reverse"
         />
         <div
-          class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-MyYellow/5 rounded-full blur-3xl animate-pulse-slow"
+          class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-MyYellow/5 rounded-full blur-3xl animate-breathe"
+        />
+        <!-- Additional subtle decorative elements -->
+        <div
+          class="absolute top-1/3 right-1/3 w-2 h-2 bg-MyPink/40 rounded-full animate-pulse"
+        />
+        <div
+          class="absolute bottom-1/3 left-1/3 w-1 h-1 bg-MyBlue/50 rounded-full animate-pulse"
+          style="animation-delay: 0.5s"
+        />
+        <div
+          class="absolute top-2/3 right-1/4 w-1.5 h-1.5 bg-MyYellow/30 rounded-full animate-pulse"
+          style="animation-delay: 1s"
         />
       </div>
 
       <div class="relative z-10 text-center" :style="getElementTransform(1)">
         <p
-          class="font-bricolage text-sm text-MyPink mb-4 tracking-widest uppercase animate-fade-in"
+          class="font-bricolage text-sm text-MyPink mb-4 tracking-widest uppercase animate-fade-in degradable degradable-text"
         >
           🎯 OBJECTIF
         </p>
         <h1
           ref="heroTitle"
-          class="font-candy text-6xl text-white md:text-8xl lg:text-[10rem] hero-title-glow"
+          class="font-candy text-6xl text-white md:text-8xl lg:text-[10rem] hero-title-glow degradable"
+          :class="{ 'corrupted-text': degradationLevel > 0.5 }"
+          :data-text="'Trouve le secret.'"
         >
-          <span class="inline-block animate-title-reveal p-4">Trouve</span>
+          <span class="inline-block animate-title-reveal p-4 degradable"
+            >Trouve</span
+          >
           <span
-            class="inline-block animate-title-reveal"
+            class="inline-block animate-title-reveal degradable"
             style="animation-delay: 0.1s"
           >
             le</span
           >
           <span
-            class="inline-block animate-title-reveal text-transparent bg-clip-text bg-gradient-to-r from-MyPink via-MyBlue to-MyGreen p-4"
+            class="inline-block animate-title-reveal text-transparent bg-clip-text bg-gradient-to-r from-MyPink via-MyBlue to-MyGreen p-4 degradable"
             style="animation-delay: 0.2s"
           >
             secret.</span
           >
         </h1>
         <p
-          class="mt-8 max-w-lg mx-auto text-center font-bricolage text-xl text-zinc-400 animate-fade-in-up"
+          class="mt-8 max-w-lg mx-auto text-center font-bricolage text-xl text-zinc-400 animate-fade-in-up degradable"
           style="animation-delay: 0.5s"
         >
           Un bouton est caché quelque part. Plus le chaos augmente, plus il
           devient visible.
         </p>
         <p
-          class="mt-4 font-bricolage text-sm text-zinc-600 animate-fade-in-up"
+          class="mt-4 font-bricolage text-sm text-zinc-600 animate-fade-in-up degradable degradable-text"
           style="animation-delay: 0.7s"
         >
           Interagis • Joue aux mini-jeux • Dégrade le système
         </p>
 
-        <!-- Progress hint -->
+        <!-- Progress hint avec compteur de boucles -->
         <div
-          class="mt-12 flex items-center justify-center gap-4 animate-fade-in-up"
+          class="mt-12 flex flex-col items-center justify-center gap-4 animate-fade-in-up"
           style="animation-delay: 0.9s"
         >
           <div
-            class="flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-800/50 border border-zinc-700"
+            class="flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-800/50 border border-zinc-700 degradable"
+            :class="{ 'shaky-border': degradationLevel > 0.4 }"
           >
             <span
               class="w-2 h-2 rounded-full"
               :class="
-                degradation.level >= 0.7
+                degradationLevel >= 0.7
                   ? 'bg-MyGreen animate-pulse'
                   : 'bg-zinc-600'
               "
             />
-            <span
-              class="font-bricolage text-xs"
-              :class="
-                degradation.level >= 0.7 ? 'text-MyGreen' : 'text-zinc-500'
-              "
-            >
-              {{
-                degradation.level >= 0.7
-                  ? "Bouton débloqué !"
-                  : `${Math.round(degradation.level * 100)}% / 70%`
-              }}
+            <span class="font-bricolage text-xs">
+              <template v-if="showHint">
+                <span class="text-MyGreen font-semibold">🔍 Indice :</span>
+                <span class="ml-2 text-white/90">
+                  <template v-if="secretButtonVisible">
+                    Position ~ {{ Math.round(secretButtonPosition.x) }}% gauche,
+                    {{ Math.round(secretButtonPosition.y) }}px haut
+                  </template>
+                  <template v-else>
+                    Continue à interagir —
+                    {{ Math.round(degradationLevel * 100) }}% / 30%
+                  </template>
+                </span>
+              </template>
+              <template v-else>
+                <span
+                  :class="
+                    degradationLevel >= 0.7 ? 'text-MyGreen' : 'text-zinc-500'
+                  "
+                >
+                  {{
+                    degradationLevel >= 0.7
+                      ? "Bouton débloqué !"
+                      : `${Math.round(degradationLevel * 100)}% / 70%`
+                  }}
+                </span>
+              </template>
             </span>
           </div>
+
+          <!-- loop counter removed to reduce UI noise -->
         </div>
       </div>
 
@@ -2684,21 +3381,25 @@ onUnmounted(() => {
 
         <!-- Panel 2: Features -->
         <div
-          class="horizontal-panel min-w-[100vw] h-screen flex items-center justify-center relative overflow-hidden"
+          class="horizontal-panel min-w-[100vw] h-screen flex items-center justify-center relative overflow-hidden degradable"
         >
           <div
-            class="absolute inset-0 bg-gradient-to-br from-MyYellow/10 via-transparent to-MyGreen/10"
+            class="absolute inset-0 bg-gradient-to-br from-MyYellow/10 via-transparent to-MyGreen/10 degradable"
           />
           <div
             class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-MyYellow via-MyGreen to-MyBlue"
           />
           <div class="text-center z-10 px-8">
             <span
-              class="inline-block px-4 py-2 rounded-full bg-MyYellow/20 border border-MyYellow/50 text-MyYellow text-sm font-bricolage mb-6"
+              class="inline-block px-4 py-2 rounded-full bg-MyYellow/20 border border-MyYellow/50 text-MyYellow text-sm font-bricolage mb-6 degradable"
               >02 / 04</span
             >
-            <h2 class="font-candy text-5xl md:text-7xl text-white mb-12">
-              Mini-Jeux<br /><span class="text-MyYellow">Addictifs</span>
+            <h2
+              class="font-candy text-5xl md:text-7xl text-white mb-12 degradable"
+            >
+              Mini-Jeux<br /><span class="text-MyYellow degradable"
+                >Addictifs</span
+              >
             </h2>
             <div
               class="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto"
@@ -2708,7 +3409,7 @@ onUnmounted(() => {
                 tabindex="0"
                 @click.prevent="scrollToSection('game-sequence')"
                 @keydown.enter="scrollToSection('game-sequence')"
-                class="p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800 hover:border-MyPink/50 transition-all hover:scale-105 cursor-pointer"
+                class="p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800 hover:border-MyPink/50 transition-all hover:scale-105 cursor-pointer degradable"
               >
                 <span class="text-4xl">🧠</span>
                 <p class="mt-3 font-bricolage text-white text-sm">Séquence</p>
@@ -2718,7 +3419,7 @@ onUnmounted(() => {
                 tabindex="0"
                 @click.prevent="scrollToSection('game-target')"
                 @keydown.enter="scrollToSection('game-target')"
-                class="p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800 hover:border-MyBlue/50 transition-all hover:scale-105 cursor-pointer"
+                class="p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800 hover:border-MyBlue/50 transition-all hover:scale-105 cursor-pointer degradable"
               >
                 <span class="text-4xl">🎯</span>
                 <p class="mt-3 font-bricolage text-white text-sm">Cibles</p>
@@ -2728,7 +3429,7 @@ onUnmounted(() => {
                 tabindex="0"
                 @click.prevent="scrollToSection('game-puzzle')"
                 @keydown.enter="scrollToSection('game-puzzle')"
-                class="p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800 hover:border-MyYellow/50 transition-all hover:scale-105 cursor-pointer"
+                class="p-6 rounded-2xl bg-zinc-900/60 border border-zinc-800 hover:border-MyYellow/50 transition-all hover:scale-105 cursor-pointer degradable"
               >
                 <span class="text-4xl">🧩</span>
                 <p class="mt-3 font-bricolage text-white text-sm">Puzzle</p>
@@ -2990,13 +3691,16 @@ onUnmounted(() => {
     <section
       class="reveal-section relative min-h-screen px-6 py-24 overflow-hidden"
     >
-      <!-- Background decoration -->
+      <!-- Background decoration with parallax -->
       <div class="absolute inset-0 pointer-events-none">
         <div
-          class="absolute top-20 left-10 w-64 h-64 bg-MyPink/5 rounded-full blur-3xl animate-float-slow"
+          class="absolute top-20 left-10 w-64 h-64 bg-MyPink/5 rounded-full blur-3xl animate-parallax-float"
         />
         <div
           class="absolute bottom-20 right-10 w-80 h-80 bg-MyBlue/5 rounded-full blur-3xl animate-float-slow-reverse"
+        />
+        <div
+          class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-gradient-radial from-purple-500/3 via-transparent to-transparent rounded-full animate-breathe"
         />
       </div>
 
@@ -3010,6 +3714,12 @@ onUnmounted(() => {
             >État du système</span
           >
         </h2>
+        <!-- Élément discret: Mot (Éphémère) -->
+        <p
+          class="text-center text-xs text-MyYellow/50 font-bricolage mt-2 tracking-[0.4em] transition-all duration-300 hover:text-MyYellow/80 cursor-default select-none discrete-hint"
+        >
+          ÉPHÉMÈRE
+        </p>
 
         <div class="mt-12 grid grid-cols-2 gap-4 md:grid-cols-4">
           <div
@@ -3080,8 +3790,21 @@ onUnmounted(() => {
       <!-- Background decoration -->
       <div class="absolute inset-0 pointer-events-none">
         <div
-          class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gradient-radial from-MyPink/10 via-transparent to-transparent rounded-full"
+          class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gradient-radial from-MyPink/10 via-transparent to-transparent rounded-full animate-breathe"
         />
+        <!-- Decorative floating orbs -->
+        <div
+          class="absolute top-20 right-20 w-32 h-32 bg-MyBlue/5 rounded-full blur-2xl animate-float-slow"
+        />
+        <div
+          class="absolute bottom-32 left-16 w-24 h-24 bg-MyYellow/5 rounded-full blur-2xl animate-parallax-float"
+        />
+        <!-- Élément discret: Nombre (42) -->
+        <div
+          class="absolute bottom-6 right-6 font-mono text-lg text-MyGreen/50 tracking-widest transition-all duration-300 hover:text-MyGreen/80 hover:scale-110 cursor-default select-none discrete-hint"
+        >
+          42
+        </div>
       </div>
 
       <div
@@ -3170,6 +3893,13 @@ onUnmounted(() => {
       id="game-click"
       class="reveal-section relative min-h-screen px-6 py-24"
     >
+      <!-- Élément discret: Sablier -->
+      <div
+        class="absolute top-8 left-8 text-3xl transition-all duration-300 hover:scale-125 cursor-default select-none discrete-hint"
+        style="opacity: 0.65"
+      >
+        ⏳
+      </div>
       <div
         class="mx-auto max-w-2xl text-center"
         :style="getElementTransform(4)"
@@ -3178,38 +3908,59 @@ onUnmounted(() => {
           ⚡ Défi de clics
         </h2>
 
-        <div v-if="!clickChallenge.active" class="mt-10">
-          <p class="font-bricolage text-zinc-500">
+        <!-- Contenu toujours visible -->
+        <div class="mt-10">
+          <p class="font-bricolage text-zinc-500 mb-4">
             Clique le plus vite possible en 5 secondes !
           </p>
-          <button
-            class="mt-6 rounded-full bg-MyPink px-10 py-4 font-bricolage text-xl font-bold text-MyBlack hover:scale-105 transition-transform"
-            @click="startClickChallenge"
-          >
-            Lancer le défi
-          </button>
-        </div>
 
-        <div v-else class="mt-10">
-          <div class="mb-6 font-candy text-8xl text-MyYellow">
-            {{ clickChallenge.timeLeft }}
+          <!-- Timer et statut -->
+          <div
+            class="mb-6 font-candy text-8xl"
+            :class="clickChallenge.started ? 'text-MyYellow' : 'text-zinc-700'"
+          >
+            {{ clickChallenge.timeLeft || 5 }}
           </div>
+
+          <!-- Bouton principal toujours visible -->
           <button
+            v-if="!clickChallenge.active"
+            class="h-48 w-48 rounded-full bg-gradient-to-br from-zinc-700 to-zinc-800 font-candy text-4xl text-zinc-400 hover:from-MyPink hover:to-MyBlue hover:text-white hover:scale-105 active:scale-95 transition-all mx-auto block border-2 border-zinc-600 hover:border-transparent"
+            @click="prepareClickChallenge"
+          >
+            GO
+          </button>
+          <button
+            v-else
             class="h-48 w-48 rounded-full bg-gradient-to-br from-MyPink to-MyBlue font-candy text-4xl text-white hover:scale-105 active:scale-95 transition-transform mx-auto block"
             @click="handleChallengeClick"
           >
             {{ clickChallenge.current }}
           </button>
-          <p class="mt-4 font-bricolage text-zinc-500">
+
+          <p
+            v-if="!clickChallenge.active"
+            class="mt-4 font-bricolage text-zinc-600 text-sm"
+          >
+            Clique sur GO pour préparer, puis clique pour démarrer !
+          </p>
+          <p
+            v-else-if="!clickChallenge.started"
+            class="mt-4 font-bricolage text-MyPink animate-pulse"
+          >
+            👆 Clique sur le bouton pour démarrer le chrono !
+          </p>
+          <p v-else class="mt-4 font-bricolage text-zinc-500">
             Objectif: {{ clickChallenge.target }} clics
           </p>
+
           <div
             class="mt-4 h-2 w-full max-w-xs mx-auto rounded-full bg-zinc-800"
           >
             <div
               class="h-full rounded-full bg-MyGreen transition-all"
               :style="{
-                width: `${Math.min(100, (clickChallenge.current / clickChallenge.target) * 100)}%`,
+                width: `${Math.min(100, (clickChallenge.current / (clickChallenge.target || 20)) * 100)}%`,
               }"
             />
           </div>
@@ -3222,122 +3973,132 @@ onUnmounted(() => {
       id="game-target"
       class="reveal-section relative min-h-screen px-6 py-24"
     >
+      <!-- Élément discret: Couleur (violet) -->
+      <div
+        class="absolute bottom-1/3 left-4 text-xs text-purple-400/60 font-bricolage tracking-wide -rotate-90 origin-left transition-all duration-300 hover:text-purple-400/90 cursor-default select-none discrete-hint"
+      >
+        teinte : violet
+      </div>
       <div class="mx-auto max-w-4xl" :style="getElementTransform(5)">
         <h2 class="text-center font-candy text-4xl text-white md:text-6xl">
           🎯 Chasse aux cibles
         </h2>
 
-        <!-- Game not active - Show start screen -->
-        <div v-if="!targetGame.active" class="mt-8 text-center">
-          <p
-            v-if="targetGame.bestScore > 0"
-            class="font-bricolage text-MyGreen mb-4"
+        <p
+          v-if="targetGame.bestScore > 0"
+          class="font-bricolage text-MyGreen mb-4 text-center mt-4"
+        >
+          🏆 Meilleur score: {{ targetGame.bestScore }} points
+        </p>
+
+        <p class="font-bricolage text-zinc-500 mb-4 text-center">
+          Touche un maximum de cibles en 30 secondes !
+        </p>
+
+        <!-- Difficulty Selection - Toujours visible quand pas actif -->
+        <div
+          v-if="!targetGame.active"
+          class="flex flex-wrap justify-center gap-4 mb-6"
+        >
+          <button
+            @click="prepareTargetGame('easy')"
+            class="px-6 py-3 rounded-xl font-bricolage font-bold bg-MyGreen text-MyBlack hover:scale-105 transition-transform"
           >
-            🏆 Meilleur score: {{ targetGame.bestScore }} points
-          </p>
-
-          <p class="font-bricolage text-zinc-500 mb-6">
-            Touche un maximum de cibles en 30 secondes !
-          </p>
-
-          <!-- Difficulty Selection -->
-          <div class="flex flex-wrap justify-center gap-4 mb-8">
-            <button
-              @click="startTargetGame('easy')"
-              class="px-6 py-3 rounded-xl font-bricolage font-bold bg-MyGreen text-MyBlack hover:scale-105 transition-transform"
-            >
-              🌱 Facile<br /><span class="text-xs opacity-70"
-                >Lent • 3s par cible</span
-              >
-            </button>
-            <button
-              @click="startTargetGame('normal')"
-              class="px-6 py-3 rounded-xl font-bricolage font-bold bg-MyYellow text-MyBlack hover:scale-105 transition-transform"
-            >
-              ⚡ Normal<br /><span class="text-xs opacity-70"
-                >Modéré • 2s par cible</span
-              >
-            </button>
-            <button
-              @click="startTargetGame('hard')"
-              class="px-6 py-3 rounded-xl font-bricolage font-bold bg-MyPink text-MyBlack hover:scale-105 transition-transform"
-            >
-              🔥 Difficile<br /><span class="text-xs opacity-70"
-                >Rapide • 1.2s par cible</span
-              >
-            </button>
-          </div>
-
-          <!-- Last game results -->
-          <div
-            v-if="targetGame.score > 0 || targetGame.missed > 0"
-            class="bg-zinc-900/50 rounded-xl p-4 max-w-md mx-auto border border-zinc-800"
+            🌱 Facile
+          </button>
+          <button
+            @click="prepareTargetGame('normal')"
+            class="px-6 py-3 rounded-xl font-bricolage font-bold bg-MyYellow text-MyBlack hover:scale-105 transition-transform"
           >
-            <p class="font-bricolage text-zinc-400 text-sm">Dernière partie</p>
-            <p class="font-candy text-3xl text-white mt-1">
-              {{ targetGame.score }} pts
-            </p>
-            <div class="flex justify-center gap-4 mt-2 text-xs text-zinc-500">
-              <span
-                >Touchées:
-                {{ targetGame.totalTargetsSpawned - targetGame.missed }}</span
-              >
-              <span>Ratées: {{ targetGame.missed }}</span>
-              <span>Max Combo: {{ targetGame.maxCombo }}</span>
-            </div>
-          </div>
+            ⚡ Normal
+          </button>
+          <button
+            @click="prepareTargetGame('hard')"
+            class="px-6 py-3 rounded-xl font-bricolage font-bold bg-MyPink text-MyBlack hover:scale-105 transition-transform"
+          >
+            🔥 Difficile
+          </button>
         </div>
 
-        <!-- Game active - Show game area -->
-        <div v-else>
-          <!-- Stats bar -->
-          <div class="mt-6 flex justify-center gap-6 font-bricolage text-sm">
-            <span class="text-white font-bold text-lg"
-              >{{ targetGame.score }} pts</span
-            >
-            <span class="text-MyYellow font-candy text-2xl"
-              >{{ targetGame.timeLeft }}s</span
-            >
-            <span v-if="targetGame.combo >= 3" class="text-MyPink animate-pulse"
-              >🔥 x{{ targetGame.combo }}</span
-            >
-          </div>
+        <!-- Stats bar - Toujours visible quand actif -->
+        <div
+          v-if="targetGame.active"
+          class="flex justify-center gap-6 font-bricolage text-sm mb-4"
+        >
+          <span class="text-white font-bold text-lg"
+            >{{ targetGame.score }} pts</span
+          >
+          <span
+            class="font-candy text-2xl"
+            :class="targetGame.started ? 'text-MyYellow' : 'text-zinc-600'"
+            >{{ targetGame.timeLeft }}s</span
+          >
+          <span v-if="targetGame.combo >= 3" class="text-MyPink animate-pulse"
+            >🔥 x{{ targetGame.combo }}</span
+          >
+        </div>
 
-          <div class="mt-2 flex justify-center gap-4 text-xs text-zinc-500">
+        <p
+          v-if="targetGame.active && !targetGame.started"
+          class="text-center font-bricolage text-MyPink animate-pulse mb-4"
+        >
+          👆 Clique sur une cible pour démarrer le chrono !
+        </p>
+
+        <!-- Game area - Toujours visible -->
+        <div
+          class="relative h-[400px] rounded-2xl bg-zinc-900/50 border border-zinc-800 overflow-hidden cursor-crosshair"
+        >
+          <!-- Cibles -->
+          <button
+            v-for="target in targets.filter((t) => !t.hit)"
+            :key="target.id"
+            :data-target-id="target.id"
+            class="absolute rounded-full bg-gradient-to-br from-MyPink to-MyBlue hover:from-MyYellow hover:to-MyGreen transition-all cursor-crosshair flex items-center justify-center shadow-lg shadow-MyPink/30"
+            :style="{
+              left: `${target.x}%`,
+              top: `${target.y}%`,
+              width: `${target.size}px`,
+              height: `${target.size}px`,
+              transform: 'translate(-50%, -50%)',
+            }"
+            @click="hitTarget(target.id)"
+          >
+            <span class="text-xl">🎯</span>
+          </button>
+
+          <!-- Message quand pas de cibles -->
+          <p
+            v-if="targets.filter((t) => !t.hit).length === 0"
+            class="absolute inset-0 flex items-center justify-center font-bricolage text-zinc-600"
+          >
+            {{
+              targetGame.active
+                ? "Prépare-toi..."
+                : "Choisis une difficulté pour commencer"
+            }}
+          </p>
+        </div>
+
+        <!-- Stats après partie -->
+        <div
+          v-if="
+            !targetGame.active &&
+            (targetGame.score > 0 || targetGame.missed > 0)
+          "
+          class="bg-zinc-900/50 rounded-xl p-4 max-w-md mx-auto border border-zinc-800 mt-6"
+        >
+          <p class="font-bricolage text-zinc-400 text-sm">Dernière partie</p>
+          <p class="font-candy text-3xl text-white mt-1">
+            {{ targetGame.score }} pts
+          </p>
+          <div class="flex justify-center gap-4 mt-2 text-xs text-zinc-500">
             <span
               >Touchées:
               {{ targetGame.totalTargetsSpawned - targetGame.missed }}</span
             >
             <span>Ratées: {{ targetGame.missed }}</span>
-          </div>
-
-          <!-- Game area -->
-          <div
-            class="relative mt-6 h-[400px] rounded-2xl bg-zinc-900/50 border border-zinc-800 overflow-hidden cursor-crosshair"
-          >
-            <button
-              v-for="target in targets.filter((t) => !t.hit)"
-              :key="target.id"
-              :data-target-id="target.id"
-              class="absolute rounded-full bg-gradient-to-br from-MyPink to-MyBlue hover:from-MyYellow hover:to-MyGreen transition-all cursor-crosshair flex items-center justify-center shadow-lg shadow-MyPink/30"
-              :style="{
-                left: `${target.x}%`,
-                top: `${target.y}%`,
-                width: `${target.size}px`,
-                height: `${target.size}px`,
-                transform: 'translate(-50%, -50%)',
-              }"
-              @click="hitTarget(target.id)"
-            >
-              <span class="text-xl">🎯</span>
-            </button>
-
-            <p
-              v-if="targets.filter((t) => !t.hit).length === 0"
-              class="absolute inset-0 flex items-center justify-center font-bricolage text-zinc-600 animate-pulse"
-            >
-              Prépare-toi...
-            </p>
+            <span>Max Combo: {{ targetGame.maxCombo }}</span>
           </div>
         </div>
       </div>
@@ -3348,6 +4109,18 @@ onUnmounted(() => {
       id="game-puzzle"
       class="reveal-section relative min-h-screen px-6 py-24"
     >
+      <!-- Élément discret: Symbole infini -->
+      <div
+        class="absolute top-12 right-8 text-MyBlue/50 text-7xl font-light transition-all duration-300 hover:text-MyBlue/70 hover:scale-110 cursor-default select-none discrete-hint animate-pulse-slow"
+      >
+        ∞
+      </div>
+      <!-- Élément discret: Pays (placé dans la section Puzzle) -->
+      <div
+        class="absolute bottom-6 right-6 font-bricolage text-xs text-zinc-500/60 tracking-widest transition-all duration-300 hover:text-MyPink/80 cursor-default select-none discrete-hint"
+      >
+        design · islande
+      </div>
       <div class="mx-auto max-w-3xl" :style="getElementTransform(6)">
         <h2 class="text-center font-candy text-4xl text-white md:text-6xl">
           🧩 Puzzle Coulissant
@@ -3614,31 +4387,27 @@ onUnmounted(() => {
       >
         <h2 class="font-candy text-4xl text-white md:text-6xl">⌨️ Typing</h2>
 
-        <div v-if="!typingGame.active" class="mt-10">
-          <p class="font-bricolage text-zinc-500">
-            Tape les mots le plus vite possible en 30 secondes !
-          </p>
-          <p
-            v-if="typingGame.score > 0"
-            class="mt-2 font-bricolage text-sm text-MyGreen"
-          >
-            Dernier score: {{ typingGame.score }} points ({{
-              typingGame.wordsCompleted
-            }}
-            mots)
-          </p>
-          <button
-            class="mt-6 rounded-full bg-MyYellow px-10 py-4 font-bricolage text-xl font-bold text-MyBlack hover:scale-105 transition-transform"
-            @click="startTypingGame"
-          >
-            Commencer
-          </button>
-        </div>
+        <p class="font-bricolage text-zinc-500 mt-4">
+          Tape les mots le plus vite possible en 30 secondes !
+        </p>
 
-        <div v-else class="mt-10">
+        <p
+          v-if="!typingGame.active && typingGame.score > 0"
+          class="mt-2 font-bricolage text-sm text-MyGreen"
+        >
+          Dernier score: {{ typingGame.score }} points ({{
+            typingGame.wordsCompleted
+          }}
+          mots)
+        </p>
+
+        <!-- Contenu du jeu toujours visible -->
+        <div class="mt-10">
           <div class="flex justify-between items-center mb-6 max-w-md mx-auto">
-            <span class="font-candy text-3xl text-MyYellow"
-              >{{ typingGame.timeLeft }}s</span
+            <span
+              class="font-candy text-3xl"
+              :class="typingGame.started ? 'text-MyYellow' : 'text-zinc-600'"
+              >{{ typingGame.timeLeft || 30 }}s</span
             >
             <span class="font-bricolage text-zinc-400"
               >Score: {{ typingGame.score }}</span
@@ -3646,16 +4415,37 @@ onUnmounted(() => {
           </div>
 
           <p class="font-candy text-6xl text-white mb-8">
-            {{ typingGame.targetWord }}
+            {{ typingGame.targetWord || "chaos" }}
+          </p>
+
+          <!-- Bouton pour préparer le jeu si pas actif -->
+          <button
+            v-if="!typingGame.active"
+            class="mb-4 rounded-full bg-MyYellow px-8 py-3 font-bricolage text-lg font-bold text-MyBlack hover:scale-105 transition-transform"
+            @click="prepareTypingGame"
+          >
+            Préparer
+          </button>
+
+          <p
+            v-if="typingGame.active && !typingGame.started"
+            class="font-bricolage text-MyPink animate-pulse mb-4"
+          >
+            👆 Commence à taper pour démarrer le chrono !
           </p>
 
           <input
             type="text"
             :value="typingGame.userInput"
             @input="handleTypingInput"
-            class="w-full max-w-md mx-auto block bg-zinc-800 border-2 border-zinc-700 rounded-xl px-6 py-4 text-center font-bricolage text-2xl text-white focus:outline-none focus:border-MyPink"
+            :disabled="!typingGame.active"
+            class="w-full max-w-md mx-auto block bg-zinc-800 border-2 rounded-xl px-6 py-4 text-center font-bricolage text-2xl text-white focus:outline-none transition-colors"
+            :class="
+              typingGame.active
+                ? 'border-MyPink focus:border-MyYellow'
+                : 'border-zinc-700 opacity-50'
+            "
             placeholder="Tape le mot ici..."
-            autofocus
           />
 
           <p class="mt-4 font-bricolage text-sm text-zinc-600">
@@ -3665,36 +4455,74 @@ onUnmounted(() => {
       </div>
     </section>
 
-    <!-- SECTION 10: TEXT DEGRADATION -->
-    <section class="reveal-section relative min-h-screen px-6 py-24">
+    <!-- SECTION 10: FAKE VICTORY BUTTON (Troll Game) -->
+    <section
+      class="reveal-section relative min-h-screen px-6 py-24 overflow-hidden"
+    >
       <div class="mx-auto max-w-4xl text-center">
-        <div class="flex flex-wrap justify-center gap-1 md:gap-2">
+        <h2 class="font-candy text-4xl text-white md:text-6xl mb-4">
           <span
-            v-for="(letter, i) in 'ENTROPIE MAXIMALE'"
-            :key="`letter-${i}`"
-            class="font-candy text-4xl md:text-6xl lg:text-7xl transition-all duration-300"
-            :style="{
-              color:
-                degradation.level > 0.5
-                  ? cursorColors[i % cursorColors.length]
-                  : 'white',
-              transform: `
-                translateY(${degradation.phase === 'broken' ? Math.sin(i) * 50 + degradation.level * 100 : Math.sin(degradation.level * 5 + i * 0.3) * degradation.level * 20}px)
-                rotate(${degradation.level * (i % 2 === 0 ? 10 : -10)}deg)
-              `,
-              opacity:
-                letter === ' ' ? 0 : Math.max(0.5, 1 - degradation.level * 0.3),
-            }"
+            class="text-transparent bg-clip-text bg-gradient-to-r from-MyYellow via-MyPink to-MyBlue"
+            >Attrape-moi</span
           >
-            {{ letter === " " ? "&nbsp;" : letter }}
-          </span>
-        </div>
+        </h2>
+        <p class="font-bricolage text-zinc-500 mb-8">
+          Clique sur le bouton pour gagner... si tu peux !
+        </p>
 
         <p
-          class="mt-16 font-bricolage text-xl text-zinc-500"
-          :style="getElementTransform(10)"
+          v-if="fakeButton.attempts > 0"
+          class="font-bricolage text-MyPink mb-4"
         >
-          Quand tout s'effondre, le secret se révèle.
+          Tentatives: {{ fakeButton.attempts }}
+        </p>
+
+        <!-- Fake button container -->
+        <div
+          class="relative h-[400px] rounded-2xl bg-zinc-900/50 border border-zinc-800 overflow-hidden"
+        >
+          <!-- Background troll messages removed as requested -->
+
+          <!-- The fake button that escapes -->
+          <button
+            class="absolute px-8 py-4 rounded-xl font-candy text-xl text-MyBlack transition-all duration-150 ease-out hover:scale-110"
+            :class="{
+              'bg-gradient-to-r from-MyGreen to-MyYellow':
+                fakeButton.attempts === 0,
+              'bg-gradient-to-r from-MyYellow to-MyPink':
+                fakeButton.attempts > 0 && fakeButton.attempts < 5,
+              'bg-gradient-to-r from-MyPink to-MyBlue':
+                fakeButton.attempts >= 5 && fakeButton.attempts < 10,
+              'bg-gradient-to-r from-MyBlue to-MyGreen animate-pulse':
+                fakeButton.attempts >= 10,
+            }"
+            :style="{
+              left: `${fakeButton.x}%`,
+              top: `${fakeButton.y}%`,
+              transform: 'translate(-50%, -50%)',
+              boxShadow:
+                fakeButton.attempts >= 10
+                  ? '0 0 30px rgba(107, 255, 255, 0.5)'
+                  : '0 0 20px rgba(187, 255, 66, 0.3)',
+            }"
+            @mouseenter="handleFakeButtonHover"
+            @touchstart.prevent="handleFakeButtonHover"
+            @click.prevent="handleFakeButtonClick"
+          >
+            {{ currentFakeMessage }}
+          </button>
+        </div>
+
+        <p class="mt-6 font-bricolage text-sm text-zinc-600">
+          <span v-if="fakeButton.attempts === 0">Vas-y, clique !</span>
+          <span v-else-if="fakeButton.attempts < 5">Continue d'essayer...</span>
+          <span v-else-if="fakeButton.attempts < 10"
+            >Tu commences à comprendre ?</span
+          >
+          <span v-else-if="fakeButton.attempts < 20"
+            >Impressionnante persévérance !</span
+          >
+          <span v-else class="text-MyPink">Tu as persévéré.</span>
         </p>
       </div>
     </section>
@@ -4078,5 +4906,210 @@ onUnmounted(() => {
 
 .star-caught {
   animation: star-catch 0.3s ease-out forwards;
+}
+
+/* Discrete hints - subtle hover effect */
+.discrete-hint {
+  position: relative;
+}
+
+.discrete-hint::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 4px;
+  background: transparent;
+  transition: background 0.3s ease;
+  pointer-events: none;
+}
+
+.discrete-hint:hover::after {
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.05) 0%,
+    transparent 70%
+  );
+}
+
+/* Enhanced scroll animations */
+.reveal-section {
+  opacity: 1;
+}
+
+@keyframes slide-up-fade {
+  from {
+    opacity: 0;
+    transform: translateY(60px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes blur-in {
+  from {
+    opacity: 0;
+    filter: blur(10px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+/* Parallax-like floating elements */
+@keyframes parallax-float {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  25% {
+    transform: translate(10px, -15px) rotate(2deg);
+  }
+  50% {
+    transform: translate(-5px, -25px) rotate(-1deg);
+  }
+  75% {
+    transform: translate(-15px, -10px) rotate(1deg);
+  }
+}
+
+.animate-parallax-float {
+  animation: parallax-float 20s ease-in-out infinite;
+}
+
+/* Subtle breathing animation for backgrounds */
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.05);
+  }
+}
+
+.animate-breathe {
+  animation: breathe 8s ease-in-out infinite;
+}
+
+/* Staggered reveal for grid items */
+@keyframes stagger-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Glowing border animation */
+@keyframes glow-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 rgba(255, 102, 200, 0);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(255, 102, 200, 0.3);
+  }
+}
+
+.animate-glow-pulse {
+  animation: glow-pulse 3s ease-in-out infinite;
+}
+
+/* Text shimmer effect */
+@keyframes text-shimmer {
+  0% {
+    background-position: -100% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.text-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 200% 100%;
+  animation: text-shimmer 3s ease-in-out infinite;
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+/* Butterfly transition */
+.butterfly-enter-active,
+.butterfly-leave-active {
+  transition:
+    opacity 0.8s ease,
+    transform 0.8s ease;
+}
+
+.butterfly-enter-from {
+  opacity: 0;
+  transform: translateX(-50px) scale(0.5);
+}
+
+.butterfly-leave-to {
+  opacity: 0;
+  transform: translateX(50px) scale(0.5);
+}
+
+/* Hint fade transition */
+.hint-fade-enter-active,
+.hint-fade-leave-active {
+  transition: all 0.3s ease;
+}
+
+.hint-fade-enter-from {
+  opacity: 0;
+  transform: translateX(-50%) translateY(20px);
+}
+
+.hint-fade-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(20px);
 }
 </style>

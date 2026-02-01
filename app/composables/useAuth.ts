@@ -27,6 +27,7 @@ interface SimpleProfile {
   id: string;
   email: string;
   username: string | null;
+  avatar_url: string | null;
   metadata: Json;
   created_at: string;
 }
@@ -50,12 +51,17 @@ interface AuthReturn extends AuthState {
     email: string,
     password: string,
   ) => Promise<{ error: AuthError | null }>;
+  signInWithGoogle: () => Promise<{ error: Error | null }>;
   signOut: () => Promise<{ error: AuthError | null }>;
   fetchProfile: () => Promise<void>;
   updateProfile: (
     updates: Partial<SimpleProfile>,
   ) => Promise<{ error: Error | null }>;
+  uploadAvatar: (
+    file: File,
+  ) => Promise<{ url: string | null; error: Error | null }>;
   initAuth: () => Promise<void>;
+  ensureProfile: () => Promise<void>;
 }
 
 // État global partagé entre les composants (exporté pour éviter la récursion de types)
@@ -210,6 +216,33 @@ export const useAuth = (): AuthReturn => {
   };
 
   /**
+   * Connexion avec Google OAuth
+   */
+  const signInWithGoogle = async (): Promise<{ error: Error | null }> => {
+    if (!import.meta.client) {
+      return { error: new Error("OAuth uniquement disponible côté client") };
+    }
+
+    const supabase = getSupabase();
+    if (!supabase) {
+      return { error: new Error("Supabase non disponible") };
+    }
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+
+    if (error) {
+      return { error: new Error(error.message) };
+    }
+
+    return { error: null };
+  };
+
+  /**
    * Déconnexion de l'utilisateur
    */
   const signOut = async (): Promise<{ error: AuthError | null }> => {
@@ -258,6 +291,140 @@ export const useAuth = (): AuthReturn => {
 
     await fetchProfile();
     return { error: null };
+  };
+
+  /**
+   * Upload un avatar pour l'utilisateur
+   * Stocke l'image dans Supabase Storage et met à jour le profil
+   */
+  const uploadAvatar = async (
+    file: File,
+  ): Promise<{ url: string | null; error: Error | null }> => {
+    if (!user.value) {
+      return { url: null, error: new Error("Utilisateur non connecté") };
+    }
+
+    const supabase = getSupabase();
+    if (!supabase) {
+      return { url: null, error: new Error("Supabase non disponible") };
+    }
+
+    // Valider le fichier
+    const maxSize = 2 * 1024 * 1024; // 2MB
+    if (file.size > maxSize) {
+      return {
+        url: null,
+        error: new Error("L'image ne doit pas dépasser 2MB"),
+      };
+    }
+
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+    if (!allowedTypes.includes(file.type)) {
+      return {
+        url: null,
+        error: new Error("Format non supporté. Utilisez JPG, PNG, WebP ou GIF"),
+      };
+    }
+
+    // Générer un nom de fichier unique
+    const fileExt = file.name.split(".").pop();
+    const fileName = `${user.value.id}-${Date.now()}.${fileExt}`;
+    const filePath = `avatars/${fileName}`;
+
+    try {
+      // Supprimer l'ancien avatar s'il existe
+      if (profile.value?.avatar_url) {
+        const oldPath = profile.value.avatar_url.split("/").pop();
+        if (oldPath) {
+          await supabase.storage.from("avatars").remove([`avatars/${oldPath}`]);
+        }
+      }
+
+      // Upload le nouveau fichier
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: true,
+        });
+
+      if (uploadError) {
+        return { url: null, error: new Error(uploadError.message) };
+      }
+
+      // Obtenir l'URL publique
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("avatars").getPublicUrl(filePath);
+
+      // Mettre à jour le profil avec la nouvelle URL
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ avatar_url: publicUrl })
+        .eq("id", user.value.id);
+
+      if (updateError) {
+        return { url: null, error: new Error(updateError.message) };
+      }
+
+      await fetchProfile();
+      return { url: publicUrl, error: null };
+    } catch (err: any) {
+      return {
+        url: null,
+        error: new Error(err.message || "Erreur lors de l'upload"),
+      };
+    }
+  };
+
+  /**
+   * S'assure qu'un profil existe pour l'utilisateur (utile pour OAuth)
+   * Crée le profil s'il n'existe pas
+   */
+  const ensureProfile = async (): Promise<void> => {
+    if (!user.value) return;
+
+    const supabase = getSupabase();
+    if (!supabase) return;
+
+    // Vérifier si le profil existe déjà
+    const { data: existingProfile } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", user.value.id)
+      .maybeSingle();
+
+    if (existingProfile) {
+      profile.value = existingProfile;
+      return;
+    }
+
+    // Créer le profil pour l'utilisateur OAuth
+    const email = user.value.email || "";
+    const metadata = user.value.user_metadata || {};
+    const username =
+      (metadata.name as string) ||
+      (metadata.full_name as string) ||
+      email.split("@")[0] ||
+      "Utilisateur";
+
+    const { data: newProfile, error } = await supabase
+      .from("profiles")
+      .insert({
+        id: user.value.id,
+        email: email,
+        username: username,
+        created_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Erreur lors de la création du profil OAuth:", error);
+      return;
+    }
+
+    profile.value = newProfile;
   };
 
   /**
@@ -327,9 +494,12 @@ export const useAuth = (): AuthReturn => {
     isAuthenticated,
     signUp,
     signIn,
+    signInWithGoogle,
     signOut,
     fetchProfile,
     updateProfile,
+    uploadAvatar,
     initAuth,
+    ensureProfile,
   } as AuthReturn;
 };

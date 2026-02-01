@@ -7,8 +7,12 @@
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   username TEXT,
+  avatar_url TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- Note: Pour ajouter avatar_url à une table existante:
+-- ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 
 -- 2. Table user_results (résultats de l'expérience)
 CREATE TABLE IF NOT EXISTS public.user_results (

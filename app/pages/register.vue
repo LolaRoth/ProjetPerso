@@ -148,16 +148,6 @@
             Se connecter
           </NuxtLink>
         </p>
-
-        <!-- Back to Home -->
-        <p class="text-center">
-          <NuxtLink
-            to="/"
-            class="text-gray-500 hover:text-gray-400 text-sm transition-colors"
-          >
-            ← Retour à l'accueil
-          </NuxtLink>
-        </p>
       </form>
     </div>
   </div>
@@ -188,7 +178,7 @@ watch(
   isAuthenticated,
   (authenticated) => {
     if (authenticated) {
-      router.push("/profile");
+      router.push("/welcome");
     }
   },
   { immediate: true },
@@ -224,9 +214,9 @@ const handleSubmit = async () => {
     "Compte créé avec succès ! Vérifiez votre email pour confirmer votre inscription.";
   isSubmitting.value = false;
 
-  // Redirection après un court délai
+  // Redirection vers la page de bienvenue après un court délai
   setTimeout(() => {
-    router.push("/profile");
+    router.push("/welcome");
   }, 2000);
 };
 

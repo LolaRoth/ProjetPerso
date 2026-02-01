@@ -81,6 +81,11 @@ export const GAMES_INFO: Record<
     description: "Teste tes réflexes",
     icon: "⚡",
   },
+  "attention-quiz": {
+    name: "Quiz d'Attention",
+    description: "As-tu vraiment observé ?",
+    icon: "👁️",
+  },
 };
 
 interface UseGameStatsReturn {
