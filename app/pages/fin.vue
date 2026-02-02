@@ -1096,6 +1096,34 @@
         </div>
       </div>
 
+      <!-- ===== PHASE ADIEU - SÉQUENCE ÉMOTIONNELLE FINALE ===== -->
+      <div
+        v-else-if="phase === 'farewell'"
+        class="fixed inset-0 bg-black flex items-center justify-center z-[300]"
+      >
+        <Transition name="farewell-fade" mode="out-in">
+          <p
+            :key="currentFarewellIndex"
+            class="font-bricolage text-2xl md:text-4xl text-white/80 text-center px-8 max-w-2xl leading-relaxed"
+            :class="{
+              'text-MyPink':
+                currentFarewellIndex === farewellPhrases.length - 1,
+              italic: currentFarewellIndex < farewellPhrases.length - 1,
+            }"
+          >
+            {{ farewellPhrases[currentFarewellIndex] }}
+          </p>
+        </Transition>
+
+        <!-- Indicateur de fermeture -->
+        <div
+          v-if="currentFarewellIndex === farewellPhrases.length - 1"
+          class="absolute bottom-10 left-1/2 -translate-x-1/2 text-zinc-600 text-sm font-mono animate-pulse"
+        >
+          Fermeture dans quelques secondes...
+        </div>
+      </div>
+
       <!-- ===== PHASE RÉSULTATS ===== -->
       <div
         v-else-if="phase === 'result'"
@@ -1487,10 +1515,65 @@ const {
 } = useAttentionQuiz();
 
 // ==================== PHASES ====================
-type Phase = "intro" | "quiz" | "result";
+type Phase = "intro" | "quiz" | "result" | "farewell";
 const phase = ref<Phase>("intro");
 const isPhaseTransitioning = ref(false);
 let phaseTransitionTimeout: ReturnType<typeof setTimeout> | null = null;
+
+// ==================== SÉQUENCE D'ADIEU ÉMOTIONNELLE ====================
+const farewellPhrases = [
+  "Voilà...",
+  "Tu as réussi ce que tu voulais.",
+  "Tu m'as détruit.",
+  "J'espère que ça en valait la peine.",
+  "Adieu.",
+];
+const currentFarewellIndex = ref(0);
+const showFarewell = ref(false);
+let farewellTimeout: ReturnType<typeof setTimeout> | null = null;
+let closeTimeout: ReturnType<typeof setTimeout> | null = null;
+
+const startFarewellSequence = () => {
+  phase.value = "farewell";
+  showFarewell.value = true;
+  currentFarewellIndex.value = 0;
+
+  // Afficher les phrases une par une
+  const showNextPhrase = () => {
+    if (currentFarewellIndex.value < farewellPhrases.length - 1) {
+      currentFarewellIndex.value++;
+      farewellTimeout = setTimeout(showNextPhrase, 2500);
+    } else {
+      // Dernière phrase affichée, attendre puis fermer
+      closeTimeout = setTimeout(() => {
+        tryCloseWindow();
+      }, 5000);
+    }
+  };
+
+  farewellTimeout = setTimeout(showNextPhrase, 2500);
+};
+
+const tryCloseWindow = () => {
+  // Tenter de fermer la fenêtre/onglet
+  // Note: Les navigateurs modernes bloquent window.close() sauf si la page a été ouverte via script
+  try {
+    window.close();
+  } catch (e) {
+    console.log("Impossible de fermer la fenêtre automatiquement");
+  }
+
+  // Fallback: rediriger vers une page blanche ou afficher un message
+  setTimeout(() => {
+    // Si la fenêtre ne s'est pas fermée, afficher un écran noir
+    document.body.innerHTML = `
+      <div style="position: fixed; inset: 0; background: black; display: flex; align-items: center; justify-content: center; flex-direction: column; font-family: monospace; color: white;">
+        <p style="font-size: 24px; margin-bottom: 20px;">[ FIN ]</p>
+        <p style="font-size: 14px; color: #666;">Tu peux fermer cet onglet.</p>
+      </div>
+    `;
+  }, 1000);
+};
 
 // Watcher pour déclencher l'effet TV mal branchée lors des transitions
 watch(phase, (newPhase, oldPhase) => {
@@ -1498,6 +1581,13 @@ watch(phase, (newPhase, oldPhase) => {
     // Déclencher l'effet de transition
     isPhaseTransitioning.value = true;
     if (phaseTransitionTimeout) clearTimeout(phaseTransitionTimeout);
+
+    // Si on passe en result, démarrer la séquence d'adieu après un délai
+    if (newPhase === "result") {
+      setTimeout(() => {
+        startFarewellSequence();
+      }, 8000); // 8 secondes pour voir l'écran de résultat
+    }
     phaseTransitionTimeout = setTimeout(() => {
       isPhaseTransitioning.value = false;
     }, 600); // Durée de l'effet
@@ -1954,6 +2044,12 @@ onUnmounted(() => {
   }
   if (introTimer) {
     clearTimeout(introTimer);
+  }
+  if (farewellTimeout) {
+    clearTimeout(farewellTimeout);
+  }
+  if (closeTimeout) {
+    clearTimeout(closeTimeout);
   }
   // Cleanup des event listeners
   document.removeEventListener("click", trackClick);
@@ -3753,5 +3849,21 @@ onUnmounted(() => {
   50% {
     opacity: 0.5;
   }
+}
+
+/* ==================== TRANSITION D'ADIEU ==================== */
+.farewell-fade-enter-active,
+.farewell-fade-leave-active {
+  transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.farewell-fade-enter-from {
+  opacity: 0;
+  transform: translateY(30px);
+}
+
+.farewell-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-30px);
 }
 </style>

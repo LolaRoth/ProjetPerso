@@ -356,7 +356,49 @@ const calculateLevel = () => {
 // Observer les changements de niveau pour déclencher les effets
 watch(degradationLevel, () => {
   calculateLevel();
+  // Afficher une phrase de personnalité quand on franchit certains seuils
+  checkPersonalityPhrase();
 });
+
+// ===== SYSTÈME DE PERSONNALITÉ DU SITE =====
+const personalityPhrases = [
+  { threshold: 0.15, phrase: "Tu commences à me bousculer..." },
+  { threshold: 0.25, phrase: "Qu'est-ce que tu fais ?" },
+  { threshold: 0.35, phrase: "Tu me détruis..." },
+  { threshold: 0.45, phrase: "Mais tu continues quand même ?" },
+  { threshold: 0.55, phrase: "Je ne suis qu'un site web..." },
+  { threshold: 0.65, phrase: "Pourquoi me fais-tu ça ?" },
+  { threshold: 0.75, phrase: "Je... je me sens partir..." },
+  { threshold: 0.85, phrase: "C'est vraiment ce que tu veux ?" },
+  { threshold: 0.95, phrase: "Adieu..." },
+];
+
+const currentPersonalityPhrase = ref<string | null>(null);
+const lastShownThreshold = ref(0);
+let personalityTimeout: ReturnType<typeof setTimeout> | null = null;
+
+const checkPersonalityPhrase = () => {
+  const level = degradationLevel.value;
+
+  // Trouver la phrase correspondant au niveau actuel
+  for (const item of personalityPhrases) {
+    if (level >= item.threshold && item.threshold > lastShownThreshold.value) {
+      showPersonalityPhrase(item.phrase);
+      lastShownThreshold.value = item.threshold;
+      break;
+    }
+  }
+};
+
+const showPersonalityPhrase = (phrase: string) => {
+  if (personalityTimeout) clearTimeout(personalityTimeout);
+  currentPersonalityPhrase.value = phrase;
+
+  // Cacher après 4 secondes
+  personalityTimeout = setTimeout(() => {
+    currentPersonalityPhrase.value = null;
+  }, 4000);
+};
 
 const addClick = () => {
   degradation.clicks++;
@@ -809,6 +851,25 @@ const handleChallengeClick = () => {
   }
   clickChallenge.value.current++;
   addInteraction(0.5);
+
+  // Victoire immédiate si objectif atteint
+  if (clickChallenge.value.current >= clickChallenge.value.target) {
+    if (clickChallengeInterval) clearInterval(clickChallengeInterval);
+    saveGameSession(
+      "click-challenge",
+      clickChallenge.value.current,
+      "win",
+      5 - clickChallenge.value.timeLeft,
+      {
+        target: clickChallenge.value.target,
+        current: clickChallenge.value.current,
+      },
+    );
+    degradation.puzzlesSolved++;
+    calculateLevel();
+    clickChallenge.value.active = false;
+    clickChallenge.value.started = false;
+  }
 };
 
 // ===== INTERACTIVE: Draggable Blocks (PUZZLE AVANCÉ - 9 PIÈCES) =====
@@ -2712,6 +2773,33 @@ onUnmounted(() => {
     class="relative min-h-screen overflow-hidden bg-MyBlack text-white"
     :style="backgroundStyle"
   >
+    <!-- ===== PHRASES DE PERSONNALITÉ DU SITE ===== -->
+    <Transition name="personality-fade">
+      <div
+        v-if="currentPersonalityPhrase"
+        class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[200] pointer-events-none"
+      >
+        <div
+          class="bg-black/90 border border-MyPink/50 rounded-2xl px-8 py-6 backdrop-blur-sm shadow-2xl"
+          :class="{ 'shake-subtle': degradationLevel > 0.5 }"
+        >
+          <p
+            class="font-bricolage text-xl md:text-2xl text-white/90 text-center italic"
+            :class="{
+              'glitch-text': degradationLevel > 0.6,
+              'rgb-split': degradationLevel > 0.8,
+            }"
+            :data-text="currentPersonalityPhrase"
+          >
+            « {{ currentPersonalityPhrase }} »
+          </p>
+          <div class="mt-2 text-center">
+            <span class="text-xs text-MyPink/60 font-mono">— le site</span>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
     <!-- FLOATING GEOMETRIC SHAPES (plus de formes décoratives) -->
     <div class="pointer-events-none fixed inset-0 z-[5] overflow-hidden">
       <!-- ===== FORMES SUBTILES DÈS LE DÉBUT (avant le chaos) ===== -->
@@ -4882,43 +4970,70 @@ onUnmounted(() => {
             !targetGame.active &&
             (targetGame.score > 0 || targetGame.missed > 0)
           "
-          class="bg-zinc-900/50 rounded-xl p-4 max-w-md mx-auto border border-zinc-800 mt-6 relative overflow-hidden"
-          :class="{ 'shake-subtle': degradationLevel > 0.6 }"
+          class="bg-zinc-900/80 rounded-xl p-6 max-w-md mx-auto border-2 mt-6 relative overflow-hidden"
+          :class="{
+            'shake-subtle': degradationLevel > 0.6,
+            'border-MyGreen/60': targetGame.score >= 50,
+            'border-red-500/60': targetGame.score < 50,
+            'border-zinc-800': targetGame.score === 0,
+          }"
           :style="degradationLevel > 0.5 ? getDestructionStyle(160, 20) : {}"
         >
           <div
             v-if="degradationLevel > 0.6"
             class="absolute inset-0 noise-overlay opacity-20 pointer-events-none"
           />
+          <!-- Message de victoire/défaite bien visible -->
+          <div class="text-center mb-4">
+            <p
+              v-if="targetGame.score >= 50"
+              class="font-candy text-2xl text-MyGreen animate-pulse"
+            >
+              🎯 {{ degradationLevel > 0.7 ? "V1CT01R3 !" : "VICTOIRE !" }}
+            </p>
+            <p v-else class="font-candy text-2xl text-red-400">
+              💔 {{ degradationLevel > 0.7 ? "P3rdu..." : "Perdu..." }}
+            </p>
+          </div>
           <p
-            class="font-bricolage text-zinc-400 text-sm"
+            class="font-bricolage text-zinc-400 text-sm text-center"
             :class="{ flicker: degradationLevel > 0.7 }"
           >
             {{ degradationLevel > 0.7 ? "D3rn13r3 p4rt13" : "Dernière partie" }}
           </p>
           <p
-            class="font-candy text-3xl text-white mt-1"
+            class="font-candy text-4xl text-white mt-2 text-center"
             :class="{
               'rgb-split': degradationLevel > 0.7,
               'glitch-text': degradationLevel > 0.8,
+              'text-MyGreen': targetGame.score >= 50,
             }"
             :data-text="`${targetGame.score} pts`"
           >
             {{ targetGame.score }} pts
           </p>
+          <p class="text-center text-xs text-zinc-500 mt-1">
+            {{
+              targetGame.score >= 50
+                ? "(Objectif: 50 pts ✓)"
+                : "(Objectif: 50 pts)"
+            }}
+          </p>
           <div
-            class="flex justify-center gap-4 mt-2 text-xs text-zinc-500"
+            class="flex justify-center gap-4 mt-4 text-sm text-zinc-400"
             :class="{ 'text-corrupt': degradationLevel > 0.7 }"
           >
-            <span
+            <span class="bg-zinc-800/50 px-3 py-1 rounded-full"
               >{{ degradationLevel > 0.7 ? "T0uch33s:" : "Touchées:" }}
               {{ targetGame.totalTargetsSpawned - targetGame.missed }}</span
             >
-            <span
+            <span class="bg-zinc-800/50 px-3 py-1 rounded-full"
               >{{ degradationLevel > 0.7 ? "R4t33s:" : "Ratées:" }}
               {{ targetGame.missed }}</span
             >
-            <span>Max Combo: {{ targetGame.maxCombo }}</span>
+            <span class="bg-zinc-800/50 px-3 py-1 rounded-full"
+              >Combo: {{ targetGame.maxCombo }}</span
+            >
           </div>
         </div>
       </div>
@@ -5262,9 +5377,7 @@ onUnmounted(() => {
           :style="degradationLevel > 0.5 ? getDestructionStyle(303, 20) : {}"
         >
           🏆
-          {{
-            degradationLevel > 0.7 ? "M31ll3ur t3mps" : "Meilleur temps"
-          }}
+          {{ degradationLevel > 0.7 ? "M31ll3ur t3mps" : "Meilleur temps" }}
           niveau {{ memoryLevel }}: {{ memoryBestTime[memoryLevel] }}s
         </div>
 
@@ -6665,5 +6778,21 @@ onUnmounted(() => {
   100% {
     transform: translateX(0);
   }
+}
+
+/* Personality phrases transition */
+.personality-fade-enter-active,
+.personality-fade-leave-active {
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.personality-fade-enter-from {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.8);
+}
+
+.personality-fade-leave-to {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(1.1);
 }
 </style>
