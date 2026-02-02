@@ -64,8 +64,13 @@
       <div ref="usernameContainer" class="overflow-hidden">
         <h1
           ref="usernameText"
-          class="font-candy text-5xl md:text-7xl lg:text-8xl text-transparent bg-clip-text bg-gradient-to-r from-MyPink via-white to-MyBlue"
+          class="font-candy text-5xl md:text-7xl lg:text-8xl text-transparent bg-clip-text bg-gradient-to-r from-MyPink via-white to-MyBlue drop-shadow-lg"
           :class="animationReady ? 'translate-y-full' : 'translate-y-0'"
+          style="
+            text-shadow:
+              0 0 40px rgba(255, 102, 200, 0.3),
+              0 0 80px rgba(107, 255, 255, 0.2);
+          "
         >
           {{ displayName }}
         </h1>
@@ -75,14 +80,20 @@
       <div ref="experienceContainer" class="overflow-hidden mt-8">
         <p
           ref="experienceText"
-          class="font-bricolage text-zinc-500 text-base md:text-lg tracking-wide"
+          class="font-bricolage text-zinc-500 text-base md:text-lg tracking-wide flex items-center justify-center gap-2"
           :class="
             animationReady
               ? 'translate-y-full opacity-0'
               : 'translate-y-0 opacity-100'
           "
         >
+          <span
+            class="inline-block w-8 h-px bg-gradient-to-r from-transparent to-MyPink/50"
+          ></span>
           Tu es arrivé dans l'expérience
+          <span
+            class="inline-block w-8 h-px bg-gradient-to-r from-MyBlue/50 to-transparent"
+          ></span>
         </p>
       </div>
 

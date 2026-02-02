@@ -4,9 +4,14 @@
     :style="degradationStyles"
     :class="mainContainerClass"
   >
-    <LayoutAuthHeader v-if="!hideHeader" />
+    <Transition name="header-fade">
+      <LayoutAuthHeader v-if="!hideHeader" />
+    </Transition>
     <NuxtRouteAnnouncer />
-    <div :class="hideHeader ? '' : 'pt-14'">
+    <div
+      :class="hideHeader ? '' : 'pt-14'"
+      class="transition-[padding] duration-700"
+    >
       <NuxtPage />
     </div>
 
@@ -28,7 +33,11 @@ const {
 
 // Hide header only on fin page (not on home page)
 const hideHeader = computed(() => {
-  return route.path === "/fin";
+  // Cacher sur la page fin
+  if (route.path === "/fin") return true;
+  // Cacher sur la page principale quand on dépasse la phase "glitching" (> 30%)
+  if (route.path === "/" && level.value > 0.3) return true;
+  return false;
 });
 
 // Afficher la dégradation sur la page principale
@@ -100,3 +109,18 @@ onUnmounted(() => {
   }
 });
 </script>
+<style scoped>
+/* Animation de disparition du header */
+.header-fade-enter-active,
+.header-fade-leave-active {
+  transition:
+    opacity 0.7s ease,
+    transform 0.7s ease;
+}
+
+.header-fade-enter-from,
+.header-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-100%);
+}
+</style>

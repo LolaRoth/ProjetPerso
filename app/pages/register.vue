@@ -1,8 +1,42 @@
 <template>
-  <div class="min-h-screen flex items-center justify-center px-4">
-    <div class="w-full max-w-md">
+  <div
+    class="min-h-screen flex items-center justify-center px-4 py-8 relative overflow-hidden"
+  >
+    <!-- Fond décoratif -->
+    <div class="absolute inset-0 pointer-events-none">
+      <div
+        class="absolute -top-40 -right-40 w-80 h-80 bg-MyBlue/20 rounded-full blur-3xl animate-pulse-slow"
+      />
+      <div
+        class="absolute -bottom-40 -left-40 w-96 h-96 bg-MyPink/15 rounded-full blur-3xl animate-pulse-slow"
+        style="animation-delay: 1s"
+      />
+      <div
+        class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br from-MyBlue/5 to-MyPink/5 rounded-full blur-3xl"
+      />
+    </div>
+
+    <div class="w-full max-w-md relative z-10">
       <!-- Header -->
       <div class="text-center mb-8">
+        <div
+          class="inline-flex items-center justify-center w-16 h-16 mb-4 rounded-2xl bg-gradient-to-br from-MyBlue/20 to-MyPink/20 border border-white/10"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-8 w-8 text-MyBlue"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
+            />
+          </svg>
+        </div>
         <h1 class="text-3xl font-bold text-white mb-2">Créer un compte</h1>
         <p class="text-gray-400">
           Inscrivez-vous pour sauvegarder vos résultats
@@ -112,7 +146,7 @@
         <button
           type="submit"
           :disabled="isSubmitting"
-          class="w-full py-3 px-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          class="w-full py-3 px-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-semibold rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 hover:scale-[1.02] hover:shadow-lg hover:shadow-purple-500/25 active:scale-[0.98]"
         >
           <svg
             v-if="isSubmitting"

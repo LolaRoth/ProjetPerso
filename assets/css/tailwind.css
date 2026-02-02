@@ -253,3 +253,169 @@ body[data-phase="broken"] .degradable {
       drop-shadow(4px 0 rgba(0, 255, 255, 0.7));
   }
 }
+
+/* ========================================
+   ANIMATIONS GLOBALES AMÉLIORÉES
+   ======================================== */
+
+/* Animation pulse lente pour les fonds décoratifs */
+@keyframes pulse-slow {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 4s ease-in-out infinite;
+}
+
+/* Animation de gradient qui bouge */
+@keyframes gradient-x {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.animate-gradient-x {
+  background-size: 200% 200%;
+  animation: gradient-x 3s ease infinite;
+}
+
+/* Animation de flottement subtil */
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Animation d'entrée fade-up */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.5s ease-out forwards;
+}
+
+/* Animation de scale-in */
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-scale-in {
+  animation: scale-in 0.3s ease-out forwards;
+}
+
+/* Animation de shimmer (effet de brillance) */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+/* ========================================
+   UTILITAIRES GLOBAUX
+   ======================================== */
+
+/* Glow effects pour les textes */
+.text-glow-pink {
+  text-shadow:
+    0 0 20px rgba(255, 102, 200, 0.5),
+    0 0 40px rgba(255, 102, 200, 0.3);
+}
+
+.text-glow-blue {
+  text-shadow:
+    0 0 20px rgba(107, 255, 255, 0.5),
+    0 0 40px rgba(107, 255, 255, 0.3);
+}
+
+/* Box glow effects */
+.box-glow-pink {
+  box-shadow:
+    0 0 20px rgba(255, 102, 200, 0.3),
+    0 0 40px rgba(255, 102, 200, 0.1);
+}
+
+.box-glow-blue {
+  box-shadow:
+    0 0 20px rgba(107, 255, 255, 0.3),
+    0 0 40px rgba(107, 255, 255, 0.1);
+}
+
+/* Smooth scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(18, 18, 18, 0.5);
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #ff66c8, #6bffff);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #ff88d8, #8bffff);
+}
+
+/* Selection style */
+::selection {
+  background: rgba(255, 102, 200, 0.3);
+  color: white;
+}
+
+/* Focus visible pour accessibilité */
+:focus-visible {
+  outline: 2px solid #ff66c8;
+  outline-offset: 2px;
+}

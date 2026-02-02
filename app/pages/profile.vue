@@ -882,6 +882,31 @@ table tbody tr:hover {
   will-change: transform, box-shadow;
 }
 
+/* Effet de hover sur les cartes de jeu */
+.game-card-hover {
+  transition: all 0.3s ease;
+}
+.game-card-hover:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.4);
+}
+
+/* Animation d'entrée pour les stats */
+@keyframes stat-appear {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.stat-animate {
+  animation: stat-appear 0.5s ease-out forwards;
+}
+
 /* Additional home-like utilities */
 .hero-title-glow {
   text-shadow:
