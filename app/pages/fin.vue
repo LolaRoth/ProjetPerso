@@ -1159,7 +1159,9 @@
         </div>
 
         <!-- Lignes de connexion subtiles -->
-        <svg class="absolute inset-0 w-full h-full pointer-events-none opacity-20">
+        <svg
+          class="absolute inset-0 w-full h-full pointer-events-none opacity-20"
+        >
           <line
             v-for="line in farewellLines"
             :key="line.id"
@@ -1173,7 +1175,13 @@
             :style="{ animationDelay: `${line.delay}s` }"
           />
           <defs>
-            <linearGradient id="farewell-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <linearGradient
+              id="farewell-gradient"
+              x1="0%"
+              y1="0%"
+              x2="100%"
+              y2="100%"
+            >
               <stop offset="0%" stop-color="#FF66C8" stop-opacity="0.5" />
               <stop offset="100%" stop-color="#6BFFFF" stop-opacity="0.5" />
             </linearGradient>
@@ -1201,13 +1209,24 @@
             v-if="currentFarewellIndex === farewellPhrases.length - 1"
             class="absolute bottom-10 left-1/2 -translate-x-1/2 text-center z-10"
           >
-            <div class="flex items-center gap-2 text-zinc-500 text-sm font-mono">
-              <span class="inline-block w-2 h-2 rounded-full bg-MyPink animate-ping" />
+            <div
+              class="flex items-center gap-2 text-zinc-500 text-sm font-mono"
+            >
+              <span
+                class="inline-block w-2 h-2 rounded-full bg-MyPink animate-ping"
+              />
               <span>Fermeture en cours...</span>
-              <span class="inline-block w-2 h-2 rounded-full bg-MyCyan animate-ping" style="animation-delay: 0.5s" />
+              <span
+                class="inline-block w-2 h-2 rounded-full bg-MyCyan animate-ping"
+                style="animation-delay: 0.5s"
+              />
             </div>
-            <div class="mt-3 h-1 w-48 bg-zinc-800 rounded-full overflow-hidden mx-auto">
-              <div class="h-full bg-gradient-to-r from-MyPink to-MyCyan farewell-progress" />
+            <div
+              class="mt-3 h-1 w-48 bg-zinc-800 rounded-full overflow-hidden mx-auto"
+            >
+              <div
+                class="h-full bg-gradient-to-r from-MyPink to-MyCyan farewell-progress"
+              />
             </div>
           </div>
         </Transition>
@@ -1788,7 +1807,7 @@ const tryCloseWindow = () => {
       // Tenter de fermer
       window.close();
     } catch (e) {}
-    
+
     // Si on est toujours là après 300ms, créer une "fausse" fermeture
     setTimeout(() => {
       // Remplacer tout le document par une page noire minimaliste
@@ -4121,7 +4140,8 @@ onUnmounted(() => {
 }
 
 @keyframes farewell-twinkle {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.2;
     transform: scale(1);
   }
@@ -4143,7 +4163,8 @@ onUnmounted(() => {
 }
 
 @keyframes farewell-float {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0) rotate(var(--rotation, 0deg));
     opacity: 0.3;
   }
@@ -4158,7 +4179,8 @@ onUnmounted(() => {
 }
 
 @keyframes farewell-pulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
     opacity: 0.1;
   }
@@ -4174,7 +4196,8 @@ onUnmounted(() => {
 }
 
 @keyframes farewell-line-fade {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0;
   }
   50% {
@@ -4187,12 +4210,15 @@ onUnmounted(() => {
 }
 
 .farewell-final {
-  text-shadow: 0 0 60px rgba(255, 102, 200, 0.5), 0 0 120px rgba(255, 102, 200, 0.3);
+  text-shadow:
+    0 0 60px rgba(255, 102, 200, 0.5),
+    0 0 120px rgba(255, 102, 200, 0.3);
   animation: farewell-final-glow 2s ease-in-out infinite;
 }
 
 @keyframes farewell-final-glow {
-  0%, 100% {
+  0%,
+  100% {
     filter: brightness(1);
   }
   50% {
@@ -4214,7 +4240,11 @@ onUnmounted(() => {
 }
 
 .farewell-vignette {
-  background: radial-gradient(ellipse at center, transparent 40%, rgba(0, 0, 0, 0.8) 100%);
+  background: radial-gradient(
+    ellipse at center,
+    transparent 40%,
+    rgba(0, 0, 0, 0.8) 100%
+  );
 }
 
 /* Transition fade simple */
