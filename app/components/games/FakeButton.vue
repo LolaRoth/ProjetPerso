@@ -107,12 +107,15 @@ const randomizeMessage = () => {
     newIndex = Math.floor(Math.random() * MESSAGES.length);
   }
   button.messageIndex = newIndex;
-  
+
   // 25% de chance d'afficher "éphémère"
   if (Math.random() < 0.25) {
-    const ephemereMessages = MESSAGES.filter(m => m.toLowerCase().includes("éphémère"));
+    const ephemereMessages = MESSAGES.filter((m) =>
+      m.toLowerCase().includes("éphémère"),
+    );
     if (ephemereMessages.length > 0) {
-      const randomEphemere = ephemereMessages[Math.floor(Math.random() * ephemereMessages.length)];
+      const randomEphemere =
+        ephemereMessages[Math.floor(Math.random() * ephemereMessages.length)];
       if (randomEphemere) {
         const idx = MESSAGES.indexOf(randomEphemere);
         if (idx >= 0) button.messageIndex = idx;
@@ -145,9 +148,9 @@ const teleportAway = (fromX: number, fromY: number, urgent = false) => {
   const predicted = predictMousePosition();
   const predictedFar = {
     x: mouseX + mouseVelocityX * 20,
-    y: mouseY + mouseVelocityY * 20
+    y: mouseY + mouseVelocityY * 20,
   };
-  
+
   // Trouver une position le plus loin possible de TOUT
   let bestX = button.x;
   let bestY = button.y;
@@ -157,15 +160,24 @@ const teleportAway = (fromX: number, fromY: number, urgent = false) => {
   for (let i = 0; i < 40; i++) {
     const testX = 5 + Math.random() * 90;
     const testY = 20 + Math.random() * 70;
-    
+
     // Score basé sur TOUTES les positions dangereuses
     const distFromMouse = distance(fromX, fromY, testX, testY);
     const distFromPredicted = distance(predicted.x, predicted.y, testX, testY);
-    const distFromPredictedFar = distance(predictedFar.x, predictedFar.y, testX, testY);
+    const distFromPredictedFar = distance(
+      predictedFar.x,
+      predictedFar.y,
+      testX,
+      testY,
+    );
     const distFromCurrent = distance(button.x, button.y, testX, testY);
-    
+
     // Pondération forte sur les prédictions
-    const score = distFromMouse * 2 + distFromPredicted * 3 + distFromPredictedFar * 2.5 + distFromCurrent * 0.5;
+    const score =
+      distFromMouse * 2 +
+      distFromPredicted * 3 +
+      distFromPredictedFar * 2.5 +
+      distFromCurrent * 0.5;
 
     if (score > bestScore) {
       bestScore = score;
@@ -188,17 +200,20 @@ const teleportAway = (fromX: number, fromY: number, urgent = false) => {
     // Mode fantôme plus fréquent
     if (Math.random() < 0.4) {
       button.isGhost = true;
-      setTimeout(() => {
-        button.isGhost = false;
-        // Re-téléporter à la réapparition !
-        teleportAway(mouseX, mouseY, true);
-      }, 100 + Math.random() * 150);
+      setTimeout(
+        () => {
+          button.isGhost = false;
+          // Re-téléporter à la réapparition !
+          teleportAway(mouseX, mouseY, true);
+        },
+        100 + Math.random() * 150,
+      );
     }
   }
 
   button.x = bestX;
   button.y = bestY;
-  
+
   // Changer le message à chaque téléportation
   randomizeMessage();
 };
@@ -210,11 +225,11 @@ const handleMouseMove = (e: MouseEvent) => {
   const rect = containerRef.value.getBoundingClientRect();
   const newMouseX = ((e.clientX - rect.left) / rect.width) * 100;
   const newMouseY = ((e.clientY - rect.top) / rect.height) * 100;
-  
+
   // Calculer la vélocité de la souris
   mouseVelocityX = newMouseX - mouseX;
   mouseVelocityY = newMouseY - mouseY;
-  
+
   lastMouseX = mouseX;
   lastMouseY = mouseY;
   mouseX = newMouseX;
@@ -230,11 +245,11 @@ const handleMouseMove = (e: MouseEvent) => {
     button.attempts++;
     emit("interaction", 2);
     teleportAway(mouseX, mouseY, true);
-    
+
     // Triple téléportation TOUJOURS
     setTimeout(() => teleportAway(mouseX, mouseY, true), 8);
     setTimeout(() => teleportAway(mouseX, mouseY, true), 16);
-    
+
     // Quadruple si très proche
     if (dist < 20) {
       setTimeout(() => teleportAway(mouseX, mouseY, true), 24);
@@ -260,18 +275,26 @@ const startAutonomousMovement = () => {
       teleportAway(mouseX, mouseY, true);
     }
   }, 50); // ULTRA rapide: 50ms
-  
+
   // Système de prédiction PARANOÏAQUE
   predictionInterval = setInterval(() => {
     if (button.attempts > 2) {
       const predicted = predictMousePosition();
-      const distToPredicted = distance(predicted.x, predicted.y, button.x, button.y);
-      
+      const distToPredicted = distance(
+        predicted.x,
+        predicted.y,
+        button.x,
+        button.y,
+      );
+
       // Fuir si la souris se dirige vers nous - seuil très bas
-      if (distToPredicted < 50 && (Math.abs(mouseVelocityX) > 0.5 || Math.abs(mouseVelocityY) > 0.5)) {
+      if (
+        distToPredicted < 50 &&
+        (Math.abs(mouseVelocityX) > 0.5 || Math.abs(mouseVelocityY) > 0.5)
+      ) {
         teleportAway(predicted.x, predicted.y, true);
       }
-      
+
       // Fuir aussi si la souris est simplement en mouvement vers nous
       const currentDist = distance(mouseX, mouseY, button.x, button.y);
       if (currentDist < 45) {
@@ -303,7 +326,7 @@ const handleClick = () => {
   // Déchaîner le chaos visuel
   button.isGhost = true;
   button.opacity = 0;
-  
+
   // Réapparaître après un moment avec téléportations en rafale
   setTimeout(() => {
     button.isGhost = false;

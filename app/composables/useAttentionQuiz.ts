@@ -30,12 +30,11 @@ export const ATTENTION_QUESTIONS: AttentionQuestion[] = [
     category: "pays",
   },
   {
-    id: "animal",
-    question:
-      "Quel animal (emoji) flottait dans un coin pendant le scroll horizontal ?",
-    correctAnswer: "papillon",
-    hint: "Il avait des ailes colorées...",
-    category: "animal",
+    id: "symbole-flottant",
+    question: "Quel emoji flottait dans un coin pendant le scroll horizontal ?",
+    correctAnswer: "étoile",
+    hint: "Elle brille dans le ciel nocturne...",
+    category: "symbole",
   },
   {
     id: "couleur",
@@ -81,7 +80,7 @@ export const ATTENTION_QUESTIONS: AttentionQuestion[] = [
 // Réponses alternatives acceptées pour chaque question
 const ALTERNATIVE_ANSWERS: Record<string, string[]> = {
   islande: ["iceland", "island"],
-  papillon: ["butterfly", "🦋"],
+  étoile: ["etoile", "star", "⭐", "🌟"],
   violet: ["purple", "mauve"],
   éphémère: ["ephemere", "ephemeral", "ephémère"],
   infini: ["infinity", "∞", "8"],

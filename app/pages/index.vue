@@ -1947,7 +1947,9 @@ const randomizeFakeMessage = () => {
   fakeButton.messageIndex = newIndex;
   // 30% chance d'afficher éphémère
   if (Math.random() < 0.3) {
-    const ephemereIdx = fakeButtonMessages.findIndex(m => m.toLowerCase().includes("éphémère"));
+    const ephemereIdx = fakeButtonMessages.findIndex((m) =>
+      m.toLowerCase().includes("éphémère"),
+    );
     if (ephemereIdx >= 0) fakeButton.messageIndex = ephemereIdx;
   }
 };
@@ -1975,9 +1977,14 @@ const teleportFakeButton = (fromX: number, fromY: number) => {
   for (let i = 0; i < 30; i++) {
     const testX = 5 + Math.random() * 90;
     const testY = 5 + Math.random() * 90;
-    
+
     const distFromMouse = fakeDistance(fromX, fromY, testX, testY);
-    const distFromPredicted = fakeDistance(predictedX, predictedY, testX, testY);
+    const distFromPredicted = fakeDistance(
+      predictedX,
+      predictedY,
+      testX,
+      testY,
+    );
     const score = distFromMouse * 2 + distFromPredicted * 3;
 
     if (score > bestScore) {
@@ -1997,10 +2004,13 @@ const teleportFakeButton = (fromX: number, fromY: number) => {
   }
   if (fakeButton.attempts > 12 && Math.random() < 0.35) {
     fakeButton.isGhost = true;
-    setTimeout(() => {
-      fakeButton.isGhost = false;
-      teleportFakeButton(fakeMouseX, fakeMouseY);
-    }, 100 + Math.random() * 100);
+    setTimeout(
+      () => {
+        fakeButton.isGhost = false;
+        teleportFakeButton(fakeMouseX, fakeMouseY);
+      },
+      100 + Math.random() * 100,
+    );
   }
 
   fakeButton.x = bestX;
@@ -2010,10 +2020,10 @@ const teleportFakeButton = (fromX: number, fromY: number) => {
 
 const handleFakeButtonHover = () => {
   if (fakeButton.caught) return;
-  
+
   fakeButton.attempts++;
   addInteraction(3);
-  
+
   // Triple téléportation
   teleportFakeButton(fakeMouseX, fakeMouseY);
   setTimeout(() => teleportFakeButton(fakeMouseX, fakeMouseY), 10);
@@ -2029,11 +2039,11 @@ const handleFakeButtonHover = () => {
 const handleFakeContainerMouseMove = (e: MouseEvent) => {
   const target = e.currentTarget as HTMLElement;
   if (!target) return;
-  
+
   const rect = target.getBoundingClientRect();
   const newX = ((e.clientX - rect.left) / rect.width) * 100;
   const newY = ((e.clientY - rect.top) / rect.height) * 100;
-  
+
   fakeMouseVelX = newX - fakeMouseX;
   fakeMouseVelY = newY - fakeMouseY;
   fakeMouseX = newX;
@@ -2055,18 +2065,18 @@ const handleFakeContainerMouseMove = (e: MouseEvent) => {
 // CONSÉQUENCE CATASTROPHIQUE si quelqu'un attrape le bouton
 const handleFakeButtonClick = () => {
   if (fakeButton.caught) return;
-  
+
   // IMPOSSIBLE ! Quelqu'un a réussi !
   fakeButton.caught = true;
   fakeButton.attempts += 5;
-  
+
   // CONSÉQUENCE CATASTROPHIQUE - Boost massif de chaos
   addInteraction(100);
   degradation.cycles += 10;
   degradation.interactions += 50;
   degradation.clicks += 30;
   degradation.puzzlesSolved += 5;
-  
+
   // Spawner plein de particules chaotiques
   try {
     for (let i = 0; i < 5; i++) {
@@ -2074,7 +2084,9 @@ const handleFakeButtonClick = () => {
         spawnParticles(
           Math.random() * window.innerWidth,
           Math.random() * window.innerHeight,
-          ["#FF66C8", "#6BFFFF", "#FF0000", "#BBFF42"][Math.floor(Math.random() * 4)] || "#FF0000",
+          ["#FF66C8", "#6BFFFF", "#FF0000", "#BBFF42"][
+            Math.floor(Math.random() * 4)
+          ] || "#FF0000",
           25,
         );
       }, i * 100);
@@ -2082,10 +2094,10 @@ const handleFakeButtonClick = () => {
   } catch (e) {}
 
   // Le message est affiché via le template (fakeButton.caught = true)
-  
+
   // Recalculer le niveau
   calculateLevel();
-  
+
   // Reset après 3 secondes pour qu'ils puissent réessayer
   setTimeout(() => {
     fakeButton.caught = false;
@@ -3850,7 +3862,7 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- PAPILLON QUI TRAVERSE L'ÉCRAN PENDANT LE SCROLL (Indice discret) -->
+    <!-- ÉTOILE QUI TRAVERSE L'ÉCRAN PENDANT LE SCROLL (Indice discret) -->
     <Transition name="butterfly">
       <div
         v-if="butterflyVisible"
@@ -3860,16 +3872,16 @@ onUnmounted(() => {
           top: `${30 + Math.sin(butterflyProgress * Math.PI * 3) * 25}%`,
           transform: `rotate(${Math.sin(butterflyProgress * Math.PI * 4) * 15}deg) scale(${1 + Math.sin(butterflyProgress * Math.PI) * 0.3})`,
           transition: 'opacity 0.5s ease',
-          filter: 'drop-shadow(0 0 20px rgba(255, 102, 200, 0.6))',
+          filter: 'drop-shadow(0 0 20px rgba(255, 200, 50, 0.8))',
         }"
       >
         <span
           class="text-6xl md:text-7xl animate-float-slow"
           style="display: block"
-          >🦋</span
+          >⭐</span
         >
-        <span class="text-MyPink font-bricolage text-sm mt-1 opacity-80"
-          >papillon</span
+        <span class="text-yellow-400 font-bricolage text-sm mt-1 opacity-80"
+          >étoile</span
         >
       </div>
     </Transition>
@@ -6051,7 +6063,7 @@ onUnmounted(() => {
             class="mb-4 rounded-full bg-MyYellow px-8 py-3 font-bricolage text-lg font-bold text-MyBlack hover:scale-105 transition-transform"
             @click="prepareTypingGame"
           >
-            Préparer
+            Jouer
           </button>
 
           <p
@@ -6119,9 +6131,13 @@ onUnmounted(() => {
               'bg-gradient-to-r from-MyGreen to-MyYellow':
                 fakeButton.attempts === 0 && !fakeButton.caught,
               'bg-gradient-to-r from-MyYellow to-MyPink':
-                fakeButton.attempts > 0 && fakeButton.attempts < 5 && !fakeButton.caught,
+                fakeButton.attempts > 0 &&
+                fakeButton.attempts < 5 &&
+                !fakeButton.caught,
               'bg-gradient-to-r from-MyPink to-MyBlue':
-                fakeButton.attempts >= 5 && fakeButton.attempts < 10 && !fakeButton.caught,
+                fakeButton.attempts >= 5 &&
+                fakeButton.attempts < 10 &&
+                !fakeButton.caught,
               'bg-gradient-to-r from-MyBlue to-purple-500 animate-pulse':
                 fakeButton.attempts >= 10 && !fakeButton.caught,
               'bg-red-600 animate-ping': fakeButton.caught,
@@ -6131,10 +6147,9 @@ onUnmounted(() => {
               top: `${fakeButton.y}%`,
               transform: `translate(-50%, -50%) rotate(${fakeButton.rotation}deg) scale(${fakeButton.scale})`,
               opacity: fakeButton.opacity,
-              boxShadow:
-                fakeButton.caught
-                  ? '0 0 50px rgba(255, 0, 0, 0.8)'
-                  : fakeButton.attempts >= 10
+              boxShadow: fakeButton.caught
+                ? '0 0 50px rgba(255, 0, 0, 0.8)'
+                : fakeButton.attempts >= 10
                   ? '0 0 30px rgba(147, 51, 234, 0.5)'
                   : '0 0 20px rgba(187, 255, 66, 0.3)',
               pointerEvents: fakeButton.caught ? 'none' : 'auto',
@@ -6145,18 +6160,24 @@ onUnmounted(() => {
           >
             {{ currentFakeMessage }}
           </button>
-          
+
           <!-- Message quand fantôme -->
           <div
             v-if="fakeButton.isGhost"
             class="absolute inset-0 flex items-center justify-center pointer-events-none"
           >
-            <span class="text-zinc-600 font-bricolage animate-pulse">👻 Disparu...</span>
+            <span class="text-zinc-600 font-bricolage animate-pulse"
+              >👻 Disparu...</span
+            >
           </div>
         </div>
 
         <p class="mt-6 font-bricolage text-sm text-zinc-600">
-          <span v-if="fakeButton.caught" class="text-red-500 font-bold animate-pulse">🔥 CHAOS DÉCLENCHÉ ! Le site se dégrade...</span>
+          <span
+            v-if="fakeButton.caught"
+            class="text-red-500 font-bold animate-pulse"
+            >🔥 CHAOS DÉCLENCHÉ ! Le site se dégrade...</span
+          >
           <span v-else-if="fakeButton.attempts === 0">Vas-y, clique !</span>
           <span v-else-if="fakeButton.attempts < 5">Continue d'essayer...</span>
           <span v-else-if="fakeButton.attempts < 10"

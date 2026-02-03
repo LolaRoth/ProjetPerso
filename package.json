@@ -16,5 +16,8 @@
     "nuxt": "^4.3.0",
     "vue": "^3.5.27",
     "vue-router": "^4.6.4"
+  },
+  "devDependencies": {
+    "sharp": "^0.34.5"
   }
 }

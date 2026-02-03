@@ -1099,14 +1099,94 @@
       <!-- ===== PHASE ADIEU - SÉQUENCE ÉMOTIONNELLE FINALE ===== -->
       <div
         v-else-if="phase === 'farewell'"
-        class="fixed inset-0 bg-black flex items-center justify-center z-[300]"
+        class="fixed inset-0 bg-black flex items-center justify-center z-[300] overflow-hidden farewell-container"
       >
+        <!-- Fond étoilé animé -->
+        <div class="absolute inset-0 farewell-stars">
+          <div
+            v-for="star in farewellStars"
+            :key="star.id"
+            class="absolute farewell-star"
+            :style="{
+              left: `${star.x}%`,
+              top: `${star.y}%`,
+              animationDelay: `${star.delay}s`,
+              animationDuration: `${star.duration}s`,
+              fontSize: `${star.size}px`,
+              opacity: star.opacity,
+            }"
+          >
+            {{ star.type }}
+          </div>
+        </div>
+
+        <!-- Triangles flottants -->
+        <div class="absolute inset-0 pointer-events-none">
+          <div
+            v-for="tri in farewellTriangles"
+            :key="tri.id"
+            class="absolute farewell-triangle"
+            :style="{
+              left: `${tri.x}%`,
+              top: `${tri.y}%`,
+              borderLeftWidth: `${tri.size / 2}px`,
+              borderRightWidth: `${tri.size / 2}px`,
+              borderBottomWidth: `${tri.size}px`,
+              borderBottomColor: tri.color,
+              animationDelay: `${tri.delay}s`,
+              animationDuration: `${tri.duration}s`,
+              transform: `rotate(${tri.rotation}deg)`,
+            }"
+          />
+        </div>
+
+        <!-- Cercles lumineux -->
+        <div class="absolute inset-0 pointer-events-none">
+          <div
+            v-for="circle in farewellCircles"
+            :key="circle.id"
+            class="absolute rounded-full farewell-circle"
+            :style="{
+              left: `${circle.x}%`,
+              top: `${circle.y}%`,
+              width: `${circle.size}px`,
+              height: `${circle.size}px`,
+              background: `radial-gradient(circle, ${circle.color} 0%, transparent 70%)`,
+              animationDelay: `${circle.delay}s`,
+              animationDuration: `${circle.duration}s`,
+            }"
+          />
+        </div>
+
+        <!-- Lignes de connexion subtiles -->
+        <svg class="absolute inset-0 w-full h-full pointer-events-none opacity-20">
+          <line
+            v-for="line in farewellLines"
+            :key="line.id"
+            :x1="`${line.x1}%`"
+            :y1="`${line.y1}%`"
+            :x2="`${line.x2}%`"
+            :y2="`${line.y2}%`"
+            stroke="url(#farewell-gradient)"
+            stroke-width="1"
+            class="farewell-line"
+            :style="{ animationDelay: `${line.delay}s` }"
+          />
+          <defs>
+            <linearGradient id="farewell-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#FF66C8" stop-opacity="0.5" />
+              <stop offset="100%" stop-color="#6BFFFF" stop-opacity="0.5" />
+            </linearGradient>
+          </defs>
+        </svg>
+
+        <!-- Texte principal -->
         <Transition name="farewell-fade" mode="out-in">
           <p
             :key="currentFarewellIndex"
-            class="font-bricolage text-2xl md:text-4xl text-white/80 text-center px-8 max-w-2xl leading-relaxed"
+            class="font-bricolage text-2xl md:text-4xl text-white/80 text-center px-8 max-w-2xl leading-relaxed z-10 relative farewell-text"
             :class="{
-              'text-MyPink':
+              'text-MyPink farewell-final':
                 currentFarewellIndex === farewellPhrases.length - 1,
               italic: currentFarewellIndex < farewellPhrases.length - 1,
             }"
@@ -1115,13 +1195,25 @@
           </p>
         </Transition>
 
-        <!-- Indicateur de fermeture -->
-        <div
-          v-if="currentFarewellIndex === farewellPhrases.length - 1"
-          class="absolute bottom-10 left-1/2 -translate-x-1/2 text-zinc-600 text-sm font-mono animate-pulse"
-        >
-          Fermeture dans quelques secondes...
-        </div>
+        <!-- Indicateur de fermeture stylisé -->
+        <Transition name="fade">
+          <div
+            v-if="currentFarewellIndex === farewellPhrases.length - 1"
+            class="absolute bottom-10 left-1/2 -translate-x-1/2 text-center z-10"
+          >
+            <div class="flex items-center gap-2 text-zinc-500 text-sm font-mono">
+              <span class="inline-block w-2 h-2 rounded-full bg-MyPink animate-ping" />
+              <span>Fermeture en cours...</span>
+              <span class="inline-block w-2 h-2 rounded-full bg-MyCyan animate-ping" style="animation-delay: 0.5s" />
+            </div>
+            <div class="mt-3 h-1 w-48 bg-zinc-800 rounded-full overflow-hidden mx-auto">
+              <div class="h-full bg-gradient-to-r from-MyPink to-MyCyan farewell-progress" />
+            </div>
+          </div>
+        </Transition>
+
+        <!-- Effet de vignette -->
+        <div class="absolute inset-0 pointer-events-none farewell-vignette" />
       </div>
 
       <!-- ===== PHASE RÉSULTATS ===== -->
@@ -1539,6 +1631,84 @@ const showFarewell = ref(false);
 let farewellTimeout: ReturnType<typeof setTimeout> | null = null;
 let closeTimeout: ReturnType<typeof setTimeout> | null = null;
 
+// Éléments décoratifs pour l'écran d'adieu
+const farewellStars = computed(() => {
+  const stars = [];
+  const types = ["✦", "✧", "⋆", "★", "☆", "✶", "✷", "✸", "⭐", "🌟"];
+  for (let i = 0; i < 40; i++) {
+    stars.push({
+      id: i,
+      x: Math.random() * 100,
+      y: Math.random() * 100,
+      type: types[Math.floor(Math.random() * types.length)],
+      size: 8 + Math.random() * 16,
+      delay: Math.random() * 5,
+      duration: 3 + Math.random() * 4,
+      opacity: 0.2 + Math.random() * 0.5,
+    });
+  }
+  return stars;
+});
+
+const farewellTriangles = computed(() => {
+  const triangles = [];
+  const colors = [
+    "rgba(255, 102, 200, 0.3)",
+    "rgba(107, 255, 255, 0.3)",
+    "rgba(255, 255, 255, 0.2)",
+    "rgba(139, 92, 246, 0.3)",
+  ];
+  for (let i = 0; i < 15; i++) {
+    triangles.push({
+      id: i,
+      x: Math.random() * 100,
+      y: Math.random() * 100,
+      size: 10 + Math.random() * 30,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      rotation: Math.random() * 360,
+      delay: Math.random() * 4,
+      duration: 6 + Math.random() * 6,
+    });
+  }
+  return triangles;
+});
+
+const farewellCircles = computed(() => {
+  const circles = [];
+  const colors = [
+    "rgba(255, 102, 200, 0.15)",
+    "rgba(107, 255, 255, 0.15)",
+    "rgba(139, 92, 246, 0.15)",
+  ];
+  for (let i = 0; i < 8; i++) {
+    circles.push({
+      id: i,
+      x: Math.random() * 100,
+      y: Math.random() * 100,
+      size: 50 + Math.random() * 150,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      delay: Math.random() * 3,
+      duration: 8 + Math.random() * 6,
+    });
+  }
+  return circles;
+});
+
+const farewellLines = computed(() => {
+  const lines = [];
+  for (let i = 0; i < 10; i++) {
+    lines.push({
+      id: i,
+      x1: Math.random() * 100,
+      y1: Math.random() * 100,
+      x2: Math.random() * 100,
+      y2: Math.random() * 100,
+      delay: Math.random() * 2,
+    });
+  }
+  return lines;
+});
+
 const startFarewellSequence = () => {
   phase.value = "farewell";
   showFarewell.value = true;
@@ -1561,7 +1731,7 @@ const startFarewellSequence = () => {
 };
 
 const tryCloseWindow = () => {
-  // Créer un effet de fondu au noir élégant puis rediriger vers l'accueil
+  // Créer un effet de "shutdown" spectaculaire
   const fadeOverlay = document.createElement("div");
   fadeOverlay.style.cssText = `
     position: fixed;
@@ -1569,7 +1739,7 @@ const tryCloseWindow = () => {
     background: black;
     z-index: 99999;
     opacity: 0;
-    transition: opacity 2s ease;
+    transition: opacity 1.5s ease;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1579,7 +1749,21 @@ const tryCloseWindow = () => {
   `;
 
   fadeOverlay.innerHTML = `
-    <p style="font-size: 18px; opacity: 0.6; letter-spacing: 0.2em; text-transform: uppercase;">Merci d'avoir joué</p>
+    <div style="text-align: center;">
+      <p style="font-size: 24px; opacity: 0.8; letter-spacing: 0.3em; text-transform: uppercase; margin-bottom: 20px;">Merci d'avoir joué</p>
+      <div style="display: flex; gap: 8px; justify-content: center; margin-bottom: 30px;">
+        <span style="font-size: 20px; animation: twinkle 1s ease infinite;">✦</span>
+        <span style="font-size: 20px; animation: twinkle 1s ease infinite 0.2s;">⭐</span>
+        <span style="font-size: 20px; animation: twinkle 1s ease infinite 0.4s;">✦</span>
+      </div>
+      <p style="font-size: 12px; opacity: 0.4; font-family: monospace;">[ SYSTEM SHUTDOWN ]</p>
+    </div>
+    <style>
+      @keyframes twinkle {
+        0%, 100% { opacity: 0.3; transform: scale(1); }
+        50% { opacity: 1; transform: scale(1.2); }
+      }
+    </style>
   `;
 
   document.body.appendChild(fadeOverlay);
@@ -1589,15 +1773,49 @@ const tryCloseWindow = () => {
     fadeOverlay.style.opacity = "1";
   });
 
-  // Après le fondu, nettoyer et rediriger vers la page de bienvenue
+  // Après le fondu, nettoyer le localStorage et fermer l'onglet
   setTimeout(() => {
     // Nettoyer le localStorage pour permettre de rejouer
     try {
       localStorage.removeItem("gameCompleted");
       localStorage.removeItem("chaosTimeSpent");
     } catch (e) {}
-    window.location.href = "/welcome";
-  }, 3000);
+
+    // Essayer de fermer l'onglet de plusieurs façons
+    // 1. window.close() - fonctionne si la page a été ouverte par script
+    // 2. Remplacer le document par une page vide qui ressemble à un onglet fermé
+    try {
+      // Tenter de fermer
+      window.close();
+    } catch (e) {}
+    
+    // Si on est toujours là après 300ms, créer une "fausse" fermeture
+    setTimeout(() => {
+      // Remplacer tout le document par une page noire minimaliste
+      document.documentElement.innerHTML = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title></title>
+            <style>
+              * { margin: 0; padding: 0; }
+              body { 
+                background: #000; 
+                min-height: 100vh;
+              }
+            </style>
+          </head>
+          <body></body>
+        </html>
+      `;
+      // Changer le titre pour donner l'impression que c'est fermé
+      document.title = "";
+      // Essayer de modifier l'URL pour un effet plus "fermé"
+      try {
+        history.replaceState(null, "", "about:blank");
+      } catch (e) {}
+    }, 300);
+  }, 2500);
 };
 
 // Watcher pour déclencher l'effet TV mal branchée lors des transitions
@@ -3890,5 +4108,123 @@ onUnmounted(() => {
 .farewell-fade-leave-to {
   opacity: 0;
   transform: translateY(-30px);
+}
+
+/* ==================== STYLES ÉCRAN D'ADIEU ==================== */
+.farewell-container {
+  background: radial-gradient(ellipse at center, #0a0a0a 0%, #000 100%);
+}
+
+.farewell-star {
+  animation: farewell-twinkle linear infinite;
+  text-shadow: 0 0 10px currentColor;
+}
+
+@keyframes farewell-twinkle {
+  0%, 100% {
+    opacity: 0.2;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+.farewell-triangle {
+  width: 0;
+  height: 0;
+  border-left-style: solid;
+  border-left-color: transparent;
+  border-right-style: solid;
+  border-right-color: transparent;
+  border-bottom-style: solid;
+  animation: farewell-float linear infinite;
+}
+
+@keyframes farewell-float {
+  0%, 100% {
+    transform: translateY(0) rotate(var(--rotation, 0deg));
+    opacity: 0.3;
+  }
+  50% {
+    transform: translateY(-20px) rotate(calc(var(--rotation, 0deg) + 180deg));
+    opacity: 0.6;
+  }
+}
+
+.farewell-circle {
+  animation: farewell-pulse ease-in-out infinite;
+}
+
+@keyframes farewell-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.1;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 0.25;
+  }
+}
+
+.farewell-line {
+  animation: farewell-line-fade ease-in-out infinite;
+  animation-duration: 4s;
+}
+
+@keyframes farewell-line-fade {
+  0%, 100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.farewell-text {
+  text-shadow: 0 0 40px rgba(255, 255, 255, 0.1);
+}
+
+.farewell-final {
+  text-shadow: 0 0 60px rgba(255, 102, 200, 0.5), 0 0 120px rgba(255, 102, 200, 0.3);
+  animation: farewell-final-glow 2s ease-in-out infinite;
+}
+
+@keyframes farewell-final-glow {
+  0%, 100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.2);
+  }
+}
+
+.farewell-progress {
+  animation: farewell-progress-fill 5s ease-out forwards;
+}
+
+@keyframes farewell-progress-fill {
+  0% {
+    width: 0%;
+  }
+  100% {
+    width: 100%;
+  }
+}
+
+.farewell-vignette {
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(0, 0, 0, 0.8) 100%);
+}
+
+/* Transition fade simple */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.5s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>
