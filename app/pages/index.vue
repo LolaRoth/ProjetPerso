@@ -2081,8 +2081,7 @@ const handleFakeButtonClick = () => {
     }
   } catch (e) {}
 
-  // Afficher un message spécial
-  showSecretMessage("🎭 Tu as attrapé l'impossible... Le chaos se déchaîne !");
+  // Le message est affiché via le template (fakeButton.caught = true)
   
   // Recalculer le niveau
   calculateLevel();

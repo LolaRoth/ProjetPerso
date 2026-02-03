@@ -112,7 +112,11 @@ const randomizeMessage = () => {
   if (Math.random() < 0.25) {
     const ephemereMessages = MESSAGES.filter(m => m.toLowerCase().includes("éphémère"));
     if (ephemereMessages.length > 0) {
-      button.messageIndex = MESSAGES.indexOf(ephemereMessages[Math.floor(Math.random() * ephemereMessages.length)]);
+      const randomEphemere = ephemereMessages[Math.floor(Math.random() * ephemereMessages.length)];
+      if (randomEphemere) {
+        const idx = MESSAGES.indexOf(randomEphemere);
+        if (idx >= 0) button.messageIndex = idx;
+      }
     }
   }
 };
