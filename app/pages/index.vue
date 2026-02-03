@@ -1872,89 +1872,230 @@ const endTypingGame = () => {
   }
 };
 
-// ===== NEW GAME: Fake Victory Button (Troll Game) =====
+// ===== NEW GAME: Fake Victory Button (IMPOSSIBLE À ATTRAPER) =====
 const fakeButton = reactive({
   x: 50,
   y: 50,
   attempts: 0,
   escaped: false,
+  messageIndex: 0,
+  lastMoveTime: 0,
+  scale: 1,
+  rotation: 0,
+  opacity: 1,
+  isGhost: false,
+  caught: false, // Si quelqu'un réussit l'impossible
 });
+
+// Variables pour tracker la souris
+let fakeMouseX = 50;
+let fakeMouseY = 50;
+let fakeMouseVelX = 0;
+let fakeMouseVelY = 0;
 
 const fakeButtonMessages = [
   "GAGNER",
-  "Clique ici",
-  "Non, ici",
-  "Raté",
-  "Trop lent",
-  "Encore essaye...",
-  "Tu y es presque",
-  "Ou pas",
+  "Clique ici !",
+  "Non, ici →",
+  "Raté !",
+  "Trop lent...",
+  "🎭 éphémère",
+  "Encore...",
+  "Presque !",
+  "Ou pas 😏",
   "Continue...",
-  "Abandonne pas",
-  "Haha",
-  "Impossible",
-  "Peut-être...",
-  "Non",
+  "✨ éphémère",
+  "Haha !",
+  "Impossible !",
+  "Peut-être ?",
+  "Nope",
+  "éphémère ✨",
+  "Abandon ?",
+  "Jamais !",
+  "🌀 éphémère",
+  "Facile ?",
+  "Pour toi ?",
+  "Non non !",
+  "Par là →",
+  "← Non, là !",
+  "↑ En haut ?",
+  "↓ En bas !",
+  "🎯 Rate !",
+  "Anticipé !",
+  "💨 Woosh",
+  "Bye bye",
+  "éphémère 🎭",
+  "Catch me",
+  "If you can",
+  "🚀 Zoom",
+  "Disparu !",
+  "Devine !",
 ];
 
 const currentFakeMessage = computed(() => {
+  if (fakeButton.caught) return "💀 ATTRAPÉ";
   if (fakeButton.attempts === 0) return "GAGNER";
-  return (
-    fakeButtonMessages[
-      Math.min(fakeButton.attempts, fakeButtonMessages.length - 1)
-    ] || ""
-  );
+  return fakeButtonMessages[fakeButton.messageIndex] || "éphémère";
 });
 
+// Randomize message
+const randomizeFakeMessage = () => {
+  let newIndex = Math.floor(Math.random() * fakeButtonMessages.length);
+  while (newIndex === fakeButton.messageIndex) {
+    newIndex = Math.floor(Math.random() * fakeButtonMessages.length);
+  }
+  fakeButton.messageIndex = newIndex;
+  // 30% chance d'afficher éphémère
+  if (Math.random() < 0.3) {
+    const ephemereIdx = fakeButtonMessages.findIndex(m => m.toLowerCase().includes("éphémère"));
+    if (ephemereIdx >= 0) fakeButton.messageIndex = ephemereIdx;
+  }
+};
+
+// Distance helper
+const fakeDistance = (x1: number, y1: number, x2: number, y2: number) => {
+  return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+};
+
+// Téléportation intelligente
+const teleportFakeButton = (fromX: number, fromY: number) => {
+  const now = Date.now();
+  if (now - fakeButton.lastMoveTime < 5) return;
+  fakeButton.lastMoveTime = now;
+
+  // Prédire où la souris va
+  const predictedX = fromX + fakeMouseVelX * 15;
+  const predictedY = fromY + fakeMouseVelY * 15;
+
+  let bestX = fakeButton.x;
+  let bestY = fakeButton.y;
+  let bestScore = 0;
+
+  // Chercher la meilleure position
+  for (let i = 0; i < 30; i++) {
+    const testX = 5 + Math.random() * 90;
+    const testY = 5 + Math.random() * 90;
+    
+    const distFromMouse = fakeDistance(fromX, fromY, testX, testY);
+    const distFromPredicted = fakeDistance(predictedX, predictedY, testX, testY);
+    const score = distFromMouse * 2 + distFromPredicted * 3;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestX = testX;
+      bestY = testY;
+    }
+  }
+
+  // Effets visuels
+  if (fakeButton.attempts > 3) {
+    fakeButton.rotation = (Math.random() - 0.5) * 40;
+    fakeButton.scale = 0.6 + Math.random() * 0.7;
+  }
+  if (fakeButton.attempts > 8) {
+    fakeButton.opacity = 0.4 + Math.random() * 0.6;
+  }
+  if (fakeButton.attempts > 12 && Math.random() < 0.35) {
+    fakeButton.isGhost = true;
+    setTimeout(() => {
+      fakeButton.isGhost = false;
+      teleportFakeButton(fakeMouseX, fakeMouseY);
+    }, 100 + Math.random() * 100);
+  }
+
+  fakeButton.x = bestX;
+  fakeButton.y = bestY;
+  randomizeFakeMessage();
+};
+
 const handleFakeButtonHover = () => {
-  // Move button to a random position when user tries to hover/click
+  if (fakeButton.caught) return;
+  
   fakeButton.attempts++;
-  addInteraction(2);
+  addInteraction(3);
+  
+  // Triple téléportation
+  teleportFakeButton(fakeMouseX, fakeMouseY);
+  setTimeout(() => teleportFakeButton(fakeMouseX, fakeMouseY), 10);
+  setTimeout(() => teleportFakeButton(fakeMouseX, fakeMouseY), 20);
 
-  // Calculate new random position (keeping button within bounds)
-  const newX = 10 + Math.random() * 80;
-  const newY = 20 + Math.random() * 60;
-
-  fakeButton.x = newX;
-  fakeButton.y = newY;
-
-  // After many attempts, add bonus degradation
   if (fakeButton.attempts >= 10 && fakeButton.attempts % 5 === 0) {
     degradation.puzzlesSolved += 0.5;
     calculateLevel();
   }
 };
 
-// When user actually clicks the button: increase chaos irreversibly
+// Handler pour tracker la souris dans le conteneur
+const handleFakeContainerMouseMove = (e: MouseEvent) => {
+  const target = e.currentTarget as HTMLElement;
+  if (!target) return;
+  
+  const rect = target.getBoundingClientRect();
+  const newX = ((e.clientX - rect.left) / rect.width) * 100;
+  const newY = ((e.clientY - rect.top) / rect.height) * 100;
+  
+  fakeMouseVelX = newX - fakeMouseX;
+  fakeMouseVelY = newY - fakeMouseY;
+  fakeMouseX = newX;
+  fakeMouseY = newY;
+
+  // Zone de détection MASSIVE
+  const dist = fakeDistance(fakeMouseX, fakeMouseY, fakeButton.x, fakeButton.y);
+  const detectionZone = Math.min(60, 30 + fakeButton.attempts * 2.5);
+
+  if (dist < detectionZone && !fakeButton.caught) {
+    fakeButton.attempts++;
+    addInteraction(2);
+    teleportFakeButton(fakeMouseX, fakeMouseY);
+    setTimeout(() => teleportFakeButton(fakeMouseX, fakeMouseY), 8);
+    setTimeout(() => teleportFakeButton(fakeMouseX, fakeMouseY), 16);
+  }
+};
+
+// CONSÉQUENCE CATASTROPHIQUE si quelqu'un attrape le bouton
 const handleFakeButtonClick = () => {
-  // Track the click as an attempt too
-  fakeButton.attempts++;
-
-  // Add strong interaction weight so chaos increases and can't be undone
-  addInteraction(10);
-
-  // Increase persistent counters used by calculateLevel
-  degradation.cycles += 3; // gives a visible cycle bonus
-  degradation.interactions += 20;
-  degradation.clicks += 10;
-  degradation.puzzlesSolved += 1;
-
-  // Slightly move the button to avoid immediate re-click
-  fakeButton.x = 10 + Math.random() * 80;
-  fakeButton.y = 20 + Math.random() * 60;
-
-  // Visual feedback: spawn some particles near center
+  if (fakeButton.caught) return;
+  
+  // IMPOSSIBLE ! Quelqu'un a réussi !
+  fakeButton.caught = true;
+  fakeButton.attempts += 5;
+  
+  // CONSÉQUENCE CATASTROPHIQUE - Boost massif de chaos
+  addInteraction(100);
+  degradation.cycles += 10;
+  degradation.interactions += 50;
+  degradation.clicks += 30;
+  degradation.puzzlesSolved += 5;
+  
+  // Spawner plein de particules chaotiques
   try {
-    spawnParticles(
-      window.innerWidth / 2,
-      window.innerHeight / 2,
-      "#BBFF42",
-      18,
-    );
+    for (let i = 0; i < 5; i++) {
+      setTimeout(() => {
+        spawnParticles(
+          Math.random() * window.innerWidth,
+          Math.random() * window.innerHeight,
+          ["#FF66C8", "#6BFFFF", "#FF0000", "#BBFF42"][Math.floor(Math.random() * 4)] || "#FF0000",
+          25,
+        );
+      }, i * 100);
+    }
   } catch (e) {}
 
-  // Recalculate level (will reflect the increases above)
+  // Afficher un message spécial
+  showSecretMessage("🎭 Tu as attrapé l'impossible... Le chaos se déchaîne !");
+  
+  // Recalculer le niveau
   calculateLevel();
+  
+  // Reset après 3 secondes pour qu'ils puissent réessayer
+  setTimeout(() => {
+    fakeButton.caught = false;
+    fakeButton.x = 50;
+    fakeButton.y = 50;
+    fakeButton.scale = 1;
+    fakeButton.rotation = 0;
+    fakeButton.opacity = 1;
+  }, 3000);
 };
 
 // ===== INTERACTIVE: Target Shooting (AMÉLIIORÉ) =====
@@ -5964,33 +6105,40 @@ onUnmounted(() => {
           Tentatives: {{ fakeButton.attempts }}
         </p>
 
-        <!-- Fake button container -->
+        <!-- Fake button container with mouse tracking -->
         <div
-          class="relative h-[400px] rounded-2xl bg-zinc-900/50 border border-zinc-800 overflow-hidden"
+          class="relative h-[400px] rounded-2xl bg-zinc-900/50 border border-zinc-800 overflow-hidden select-none"
+          @mousemove="handleFakeContainerMouseMove"
         >
           <!-- Background troll messages removed as requested -->
 
-          <!-- The fake button that escapes -->
+          <!-- The fake button that escapes - IMPOSSIBLE -->
           <button
-            class="absolute px-8 py-4 rounded-xl font-candy text-xl text-MyBlack transition-all duration-150 ease-out hover:scale-110"
+            v-if="!fakeButton.isGhost"
+            class="absolute px-8 py-4 rounded-xl font-candy text-xl text-MyBlack transition-all duration-75 ease-out"
             :class="{
               'bg-gradient-to-r from-MyGreen to-MyYellow':
-                fakeButton.attempts === 0,
+                fakeButton.attempts === 0 && !fakeButton.caught,
               'bg-gradient-to-r from-MyYellow to-MyPink':
-                fakeButton.attempts > 0 && fakeButton.attempts < 5,
+                fakeButton.attempts > 0 && fakeButton.attempts < 5 && !fakeButton.caught,
               'bg-gradient-to-r from-MyPink to-MyBlue':
-                fakeButton.attempts >= 5 && fakeButton.attempts < 10,
-              'bg-gradient-to-r from-MyBlue to-MyGreen animate-pulse':
-                fakeButton.attempts >= 10,
+                fakeButton.attempts >= 5 && fakeButton.attempts < 10 && !fakeButton.caught,
+              'bg-gradient-to-r from-MyBlue to-purple-500 animate-pulse':
+                fakeButton.attempts >= 10 && !fakeButton.caught,
+              'bg-red-600 animate-ping': fakeButton.caught,
             }"
             :style="{
               left: `${fakeButton.x}%`,
               top: `${fakeButton.y}%`,
-              transform: 'translate(-50%, -50%)',
+              transform: `translate(-50%, -50%) rotate(${fakeButton.rotation}deg) scale(${fakeButton.scale})`,
+              opacity: fakeButton.opacity,
               boxShadow:
-                fakeButton.attempts >= 10
-                  ? '0 0 30px rgba(107, 255, 255, 0.5)'
+                fakeButton.caught
+                  ? '0 0 50px rgba(255, 0, 0, 0.8)'
+                  : fakeButton.attempts >= 10
+                  ? '0 0 30px rgba(147, 51, 234, 0.5)'
                   : '0 0 20px rgba(187, 255, 66, 0.3)',
+              pointerEvents: fakeButton.caught ? 'none' : 'auto',
             }"
             @mouseenter="handleFakeButtonHover"
             @touchstart.prevent="handleFakeButtonHover"
@@ -5998,18 +6146,27 @@ onUnmounted(() => {
           >
             {{ currentFakeMessage }}
           </button>
+          
+          <!-- Message quand fantôme -->
+          <div
+            v-if="fakeButton.isGhost"
+            class="absolute inset-0 flex items-center justify-center pointer-events-none"
+          >
+            <span class="text-zinc-600 font-bricolage animate-pulse">👻 Disparu...</span>
+          </div>
         </div>
 
         <p class="mt-6 font-bricolage text-sm text-zinc-600">
-          <span v-if="fakeButton.attempts === 0">Vas-y, clique !</span>
+          <span v-if="fakeButton.caught" class="text-red-500 font-bold animate-pulse">🔥 CHAOS DÉCLENCHÉ ! Le site se dégrade...</span>
+          <span v-else-if="fakeButton.attempts === 0">Vas-y, clique !</span>
           <span v-else-if="fakeButton.attempts < 5">Continue d'essayer...</span>
           <span v-else-if="fakeButton.attempts < 10"
             >Tu commences à comprendre ?</span
           >
           <span v-else-if="fakeButton.attempts < 20"
-            >Impressionnante persévérance !</span
+            >C'est vraiment impossible !</span
           >
-          <span v-else class="text-MyPink">Tu as persévéré.</span>
+          <span v-else class="text-MyPink">🎭 Le bouton est... éphémère</span>
         </p>
       </div>
     </section>

@@ -9,6 +9,7 @@ import { reactive, computed, ref, onMounted, onUnmounted } from "vue";
 const emit = defineEmits<{
   clicked: [attempts: number];
   interaction: [weight: number];
+  caught: []; // Émis si quelqu'un réussit vraiment à cliquer - déclenche une conséquence catastrophique
 }>();
 
 // Messages VRAIMENT aléatoires - beaucoup plus variés
@@ -132,30 +133,35 @@ const predictMousePosition = () => {
 // Téléporte le bouton loin de la souris ET de sa trajectoire prédite
 const teleportAway = (fromX: number, fromY: number, urgent = false) => {
   const now = Date.now();
-  // Réaction ULTRA rapide - seulement 10ms de délai
-  if (!urgent && now - button.lastMoveTime < 10) return;
+  // Réaction INSTANTANÉE - aucun délai
+  if (!urgent && now - button.lastMoveTime < 5) return;
   button.lastMoveTime = now;
 
-  // Prédire où la souris va aller
+  // Prédire où la souris va aller (plus loin dans le futur)
   const predicted = predictMousePosition();
+  const predictedFar = {
+    x: mouseX + mouseVelocityX * 20,
+    y: mouseY + mouseVelocityY * 20
+  };
   
-  // Trouver une position le plus loin possible de la souris ET de sa prédiction
+  // Trouver une position le plus loin possible de TOUT
   let bestX = button.x;
   let bestY = button.y;
   let bestScore = 0;
 
-  // Essayer BEAUCOUP plus de positions pour trouver la meilleure
-  for (let i = 0; i < 20; i++) {
-    const testX = 8 + Math.random() * 84;
-    const testY = 22 + Math.random() * 68;
+  // Essayer ÉNORMÉMENT de positions pour trouver la meilleure
+  for (let i = 0; i < 40; i++) {
+    const testX = 5 + Math.random() * 90;
+    const testY = 20 + Math.random() * 70;
     
-    // Score basé sur la distance à la souris actuelle ET prédite
+    // Score basé sur TOUTES les positions dangereuses
     const distFromMouse = distance(fromX, fromY, testX, testY);
     const distFromPredicted = distance(predicted.x, predicted.y, testX, testY);
+    const distFromPredictedFar = distance(predictedFar.x, predictedFar.y, testX, testY);
     const distFromCurrent = distance(button.x, button.y, testX, testY);
     
-    // Favoriser les positions éloignées de tout
-    const score = distFromMouse * 1.5 + distFromPredicted * 2 + distFromCurrent * 0.3;
+    // Pondération forte sur les prédictions
+    const score = distFromMouse * 2 + distFromPredicted * 3 + distFromPredictedFar * 2.5 + distFromCurrent * 0.5;
 
     if (score > bestScore) {
       bestScore = score;
@@ -213,52 +219,62 @@ const handleMouseMove = (e: MouseEvent) => {
   // Distance entre la souris et le bouton
   const dist = distance(mouseX, mouseY, button.x, button.y);
 
-  // Zone de détection ÉNORME - augmente rapidement avec les tentatives
-  const detectionZone = Math.min(50, 25 + button.attempts * 2);
+  // Zone de détection MASSIVE - augmente très rapidement
+  const detectionZone = Math.min(65, 30 + button.attempts * 3);
 
   if (dist < detectionZone) {
     button.attempts++;
     emit("interaction", 2);
     teleportAway(mouseX, mouseY, true);
     
-    // Double téléportation si la souris est très proche
-    if (dist < 15) {
-      setTimeout(() => teleportAway(mouseX, mouseY, true), 20);
+    // Triple téléportation TOUJOURS
+    setTimeout(() => teleportAway(mouseX, mouseY, true), 8);
+    setTimeout(() => teleportAway(mouseX, mouseY, true), 16);
+    
+    // Quadruple si très proche
+    if (dist < 20) {
+      setTimeout(() => teleportAway(mouseX, mouseY, true), 24);
     }
   }
 };
 
-// Le bouton bouge tout seul et ANTICIPE
+// Le bouton bouge tout seul et ANTICIPE de manière PARANOÏAQUE
 const startAutonomousMovement = () => {
-  // Mouvement principal - plus rapide
+  // Mouvement principal - ULTRA rapide
   autonomousInterval = setInterval(() => {
-    // Bouger de manière erratique
-    if (button.attempts > 2) {
-      const jitterX = (Math.random() - 0.5) * 15;
-      const jitterY = (Math.random() - 0.5) * 15;
-      button.x = Math.max(8, Math.min(92, button.x + jitterX));
-      button.y = Math.max(22, Math.min(88, button.y + jitterY));
+    // Bouger de manière erratique dès le début
+    if (button.attempts > 1) {
+      const jitterX = (Math.random() - 0.5) * 20;
+      const jitterY = (Math.random() - 0.5) * 20;
+      button.x = Math.max(5, Math.min(95, button.x + jitterX));
+      button.y = Math.max(20, Math.min(90, button.y + jitterY));
     }
 
-    // Vérifier si la souris est proche et fuir
+    // Vérifier si la souris est proche et fuir - zone plus large
     const dist = distance(mouseX, mouseY, button.x, button.y);
-    if (dist < 30) {
+    if (dist < 40) {
       teleportAway(mouseX, mouseY, true);
     }
-  }, 80); // Plus rapide: 80ms au lieu de 150ms
+  }, 50); // ULTRA rapide: 50ms
   
-  // Système de prédiction - anticipe les mouvements
+  // Système de prédiction PARANOÏAQUE
   predictionInterval = setInterval(() => {
-    if (button.attempts > 5) {
+    if (button.attempts > 2) {
       const predicted = predictMousePosition();
       const distToPredicted = distance(predicted.x, predicted.y, button.x, button.y);
       
-      // Si la souris SE DIRIGE vers nous, fuir avant qu'elle arrive !
-      if (distToPredicted < 40 && (Math.abs(mouseVelocityX) > 1 || Math.abs(mouseVelocityY) > 1)) {
+      // Fuir si la souris se dirige vers nous - seuil très bas
+      if (distToPredicted < 50 && (Math.abs(mouseVelocityX) > 0.5 || Math.abs(mouseVelocityY) > 0.5)) {
         teleportAway(predicted.x, predicted.y, true);
       }
+      
+      // Fuir aussi si la souris est simplement en mouvement vers nous
+      const currentDist = distance(mouseX, mouseY, button.x, button.y);
+      if (currentDist < 45) {
+        teleportAway(mouseX, mouseY, true);
+      }
     }
-  }, 50); // Vérification très fréquente
+  }, 30); // Vérification TRÈS fréquente: 30ms
 };
 
 const handleHover = () => {
@@ -273,18 +289,26 @@ const handleHover = () => {
 };
 
 const handleClick = () => {
-  // Si par miracle quelqu'un clique, c'est probablement un lag/bug
-  // Punition maximale !
-  button.attempts += 3;
-  emit("interaction", 20);
+  // IMPOSSIBLE ! Si quelqu'un arrive à cliquer, c'est un exploit
+  // Déclencher une CONSÉQUENCE CATASTROPHIQUE sur le site !
+  button.attempts += 5;
+  emit("interaction", 50); // Énorme boost de chaos
   emit("clicked", button.attempts);
+  emit("caught"); // Signal pour déclencher la conséquence
 
-  // Quintuple téléportation de punition
-  teleportAway(mouseX, mouseY, true);
-  setTimeout(() => teleportAway(mouseX, mouseY, true), 10);
-  setTimeout(() => teleportAway(mouseX, mouseY, true), 25);
-  setTimeout(() => teleportAway(mouseX, mouseY, true), 40);
-  setTimeout(() => teleportAway(mouseX, mouseY, true), 60);
+  // Déchaîner le chaos visuel
+  button.isGhost = true;
+  button.opacity = 0;
+  
+  // Réapparaître après un moment avec téléportations en rafale
+  setTimeout(() => {
+    button.isGhost = false;
+    button.opacity = 1;
+    // Rafale de téléportations
+    for (let i = 0; i < 10; i++) {
+      setTimeout(() => teleportAway(mouseX, mouseY, true), i * 15);
+    }
+  }, 500);
 };
 
 const getButtonColor = computed(() => {
