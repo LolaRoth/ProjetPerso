@@ -29,16 +29,31 @@ export default defineNuxtConfig({
         // Auteur
         { name: "author", content: "Experience" },
         // Robots
-        { name: "robots", content: "index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" },
+        {
+          name: "robots",
+          content:
+            "index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1",
+        },
         // Theme color (pour les navigateurs mobiles)
-        { name: "theme-color", content: "#0a0a0a", media: "(prefers-color-scheme: dark)" },
-        { name: "theme-color", content: "#0a0a0a", media: "(prefers-color-scheme: light)" },
+        {
+          name: "theme-color",
+          content: "#0a0a0a",
+          media: "(prefers-color-scheme: dark)",
+        },
+        {
+          name: "theme-color",
+          content: "#0a0a0a",
+          media: "(prefers-color-scheme: light)",
+        },
         // Color scheme
         { name: "color-scheme", content: "dark" },
         // Open Graph (Facebook, LinkedIn, etc.)
         { property: "og:type", content: "website" },
         { property: "og:site_name", content: "Experience" },
-        { property: "og:title", content: "Experience | Le site qui se dégrade" },
+        {
+          property: "og:title",
+          content: "Experience | Le site qui se dégrade",
+        },
         {
           property: "og:description",
           content:
@@ -47,28 +62,43 @@ export default defineNuxtConfig({
         { property: "og:image", content: "/og-image.png" },
         { property: "og:image:width", content: "1200" },
         { property: "og:image:height", content: "630" },
-        { property: "og:image:alt", content: "Experience - Une expérience web chaotique" },
+        {
+          property: "og:image:alt",
+          content: "Experience - Une expérience web chaotique",
+        },
         { property: "og:locale", content: "fr_FR" },
         { property: "og:url", content: "https://experience.fr" },
         // Twitter Card
         { name: "twitter:card", content: "summary_large_image" },
-        { name: "twitter:title", content: "Experience | Le site qui se dégrade" },
+        {
+          name: "twitter:title",
+          content: "Experience | Le site qui se dégrade",
+        },
         {
           name: "twitter:description",
           content:
             "Une expérience web interactive unique. Jouez, explorez, et survivez au chaos !",
         },
         { name: "twitter:image", content: "/og-image.png" },
-        { name: "twitter:image:alt", content: "Experience - Une expérience web chaotique" },
+        {
+          name: "twitter:image:alt",
+          content: "Experience - Une expérience web chaotique",
+        },
         // Apple
         { name: "apple-mobile-web-app-capable", content: "yes" },
-        { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+        {
+          name: "apple-mobile-web-app-status-bar-style",
+          content: "black-translucent",
+        },
         { name: "apple-mobile-web-app-title", content: "Experience" },
         // Microsoft
         { name: "msapplication-TileColor", content: "#0a0a0a" },
         { name: "msapplication-config", content: "/browserconfig.xml" },
         // Format detection
-        { name: "format-detection", content: "telephone=no, date=no, email=no, address=no" },
+        {
+          name: "format-detection",
+          content: "telephone=no, date=no, email=no, address=no",
+        },
         // Referrer policy
         { name: "referrer", content: "strict-origin-when-cross-origin" },
       ],
@@ -76,10 +106,24 @@ export default defineNuxtConfig({
         // Favicon SVG (moderne)
         { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
         // Favicon PNG fallback
-        { rel: "icon", type: "image/png", sizes: "32x32", href: "/favicon-32x32.png" },
-        { rel: "icon", type: "image/png", sizes: "16x16", href: "/favicon-16x16.png" },
+        {
+          rel: "icon",
+          type: "image/png",
+          sizes: "32x32",
+          href: "/favicon-32x32.png",
+        },
+        {
+          rel: "icon",
+          type: "image/png",
+          sizes: "16x16",
+          href: "/favicon-16x16.png",
+        },
         // Apple Touch Icon
-        { rel: "apple-touch-icon", sizes: "180x180", href: "/apple-touch-icon.png" },
+        {
+          rel: "apple-touch-icon",
+          sizes: "180x180",
+          href: "/apple-touch-icon.png",
+        },
         // Manifest
         { rel: "manifest", href: "/site.webmanifest" },
         // Canonical
@@ -88,7 +132,11 @@ export default defineNuxtConfig({
         { rel: "dns-prefetch", href: "https://fonts.googleapis.com" },
         { rel: "dns-prefetch", href: "https://fonts.gstatic.com" },
         { rel: "preconnect", href: "https://fonts.googleapis.com" },
-        { rel: "preconnect", href: "https://fonts.gstatic.com", crossorigin: "" },
+        {
+          rel: "preconnect",
+          href: "https://fonts.gstatic.com",
+          crossorigin: "",
+        },
       ],
       // Script JSON-LD pour données structurées
       script: [
@@ -97,26 +145,27 @@ export default defineNuxtConfig({
           innerHTML: JSON.stringify({
             "@context": "https://schema.org",
             "@type": "WebApplication",
-            "name": "Experience",
-            "description": "Une expérience web interactive unique où le site se dégrade progressivement.",
-            "url": "https://experience.fr",
-            "applicationCategory": "Game",
-            "operatingSystem": "Web Browser",
-            "offers": {
+            name: "Experience",
+            description:
+              "Une expérience web interactive unique où le site se dégrade progressivement.",
+            url: "https://experience.fr",
+            applicationCategory: "Game",
+            operatingSystem: "Web Browser",
+            offers: {
               "@type": "Offer",
-              "price": "0",
-              "priceCurrency": "EUR"
+              price: "0",
+              priceCurrency: "EUR",
             },
-            "author": {
+            author: {
               "@type": "Organization",
-              "name": "Experience"
+              name: "Experience",
             },
-            "inLanguage": "fr-FR",
-            "genre": ["Interactive Art", "Puzzle Game", "Experimental"],
-            "audience": {
+            inLanguage: "fr-FR",
+            genre: ["Interactive Art", "Puzzle Game", "Experimental"],
+            audience: {
               "@type": "Audience",
-              "audienceType": "Gamers, Art enthusiasts"
-            }
+              audienceType: "Gamers, Art enthusiasts",
+            },
           }),
         },
         {
@@ -124,10 +173,11 @@ export default defineNuxtConfig({
           innerHTML: JSON.stringify({
             "@context": "https://schema.org",
             "@type": "WebSite",
-            "name": "Experience",
-            "url": "https://experience.fr",
-            "description": "Le site qui se dégrade - Une expérience web interactive unique",
-            "inLanguage": "fr-FR"
+            name: "Experience",
+            url: "https://experience.fr",
+            description:
+              "Le site qui se dégrade - Une expérience web interactive unique",
+            inLanguage: "fr-FR",
           }),
         },
       ],
@@ -161,7 +211,7 @@ export default defineNuxtConfig({
         output: {
           // Meilleur chunking pour le cache
           manualChunks: {
-            "gsap": ["gsap"],
+            gsap: ["gsap"],
             "vue-vendor": ["vue", "vue-router"],
           },
         },

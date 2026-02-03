@@ -256,7 +256,10 @@ const handleSubmit = async () => {
 
     if (error) {
       // Ignorer les erreurs d'abort (navigation)
-      if (error.message?.includes("abort") || (error as any).name === "AbortError") {
+      if (
+        error.message?.includes("abort") ||
+        (error as any).name === "AbortError"
+      ) {
         return;
       }
       errorMessage.value = getErrorMessage(error.message);
@@ -288,7 +291,10 @@ const handleGoogleSignIn = async () => {
 
     if (error) {
       // Ignorer les erreurs d'abort
-      if (error.message?.includes("abort") || (error as any).name === "AbortError") {
+      if (
+        error.message?.includes("abort") ||
+        (error as any).name === "AbortError"
+      ) {
         return;
       }
       errorMessage.value = error.message;

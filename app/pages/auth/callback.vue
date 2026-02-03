@@ -164,13 +164,13 @@ onMounted(async () => {
         // Réessayer une fois
         await new Promise((resolve) => setTimeout(resolve, 1000));
         await initAuth();
-        
+
         if (isAuthenticated.value) {
           loading.value = false;
           router.push("/welcome");
           return;
         }
-        
+
         error.value = "La connexion a échoué. Veuillez réessayer.";
       }
       loading.value = false;
@@ -186,7 +186,7 @@ onMounted(async () => {
         return;
       }
     }
-    
+
     console.error("Erreur callback OAuth:", e);
     error.value = e.message || "Une erreur inattendue s'est produite.";
     loading.value = false;
