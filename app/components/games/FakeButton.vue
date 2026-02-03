@@ -274,7 +274,7 @@ const startAutonomousMovement = () => {
     if (dist < 40) {
       teleportAway(mouseX, mouseY, true);
     }
-  }, 50); // ULTRA rapide: 50ms
+  }, 120); // Mouvement modéré: 120ms
 
   // Système de prédiction PARANOÏAQUE
   predictionInterval = setInterval(() => {
@@ -301,7 +301,7 @@ const startAutonomousMovement = () => {
         teleportAway(mouseX, mouseY, true);
       }
     }
-  }, 30); // Vérification TRÈS fréquente: 30ms
+  }, 80); // Vérification modérée: 80ms
 };
 
 const handleHover = () => {

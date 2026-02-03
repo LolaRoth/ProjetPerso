@@ -1033,7 +1033,7 @@
                 }}</span>
               </p>
               <p class="font-bricolage text-xs text-zinc-600">
-                Retour au chaos dans {{ redirectCountdown }}s...
+                On recommence dans {{ redirectCountdown }}s...
               </p>
             </div>
           </div>
@@ -2201,13 +2201,13 @@ const restartAll = () => {
   router.push("/");
 };
 
-const startRedirectCountdown = () => {
+const startRestartCountdown = () => {
   redirectCountdown.value = 3;
   redirectTimer = setInterval(() => {
     redirectCountdown.value--;
     if (redirectCountdown.value <= 0) {
       if (redirectTimer) clearInterval(redirectTimer);
-      router.push("/");
+      restartQuiz(); // Recommencer le quiz au lieu de rediriger
     }
   }, 1000);
 };
@@ -2234,9 +2234,9 @@ const handleSubmit = () => {
     );
     answered.value = true;
 
-    // Si mauvaise réponse, démarrer le countdown de redirection
+    // Si mauvaise réponse, démarrer le countdown pour recommencer
     if (!lastAnswerCorrect.value) {
-      startRedirectCountdown();
+      startRestartCountdown();
     }
   }
 };

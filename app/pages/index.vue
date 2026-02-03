@@ -386,7 +386,7 @@ const startFloatingProfile = () => {
 
   const moveProfile = () => {
     moveFloatingProfile();
-    const nextMove = 8000 - degradation.level * 5000; // 8s -> 3s
+    const nextMove = 12000 - degradation.level * 6000; // 12s -> 6s (plus lent)
     floatingProfileInterval = setTimeout(moveProfile, nextMove);
   };
 
