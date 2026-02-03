@@ -86,7 +86,7 @@ const teleportAway = (fromX: number, fromY: number, urgent = false) => {
     const testX = 10 + Math.random() * 80;
     const testY = 25 + Math.random() * 65;
     const dist = distance(fromX, fromY, testX, testY);
-    
+
     if (dist > bestDistance) {
       bestDistance = dist;
       bestX = testX;
@@ -99,7 +99,7 @@ const teleportAway = (fromX: number, fromY: number, urgent = false) => {
     button.rotation = (Math.random() - 0.5) * 30;
     button.scale = 0.7 + Math.random() * 0.6;
   }
-  
+
   if (button.attempts > 10) {
     // Parfois devenir semi-transparent
     button.opacity = 0.4 + Math.random() * 0.6;
@@ -122,18 +122,18 @@ const teleportAway = (fromX: number, fromY: number, urgent = false) => {
 // Suivre la souris dans le conteneur
 const handleMouseMove = (e: MouseEvent) => {
   if (!containerRef.value) return;
-  
+
   const rect = containerRef.value.getBoundingClientRect();
   mouseX = ((e.clientX - rect.left) / rect.width) * 100;
   mouseY = ((e.clientY - rect.top) / rect.height) * 100;
-  
+
   // Distance entre la souris et le bouton
   const dist = distance(mouseX, mouseY, button.x, button.y);
-  
+
   // Si la souris est proche, FUIR IMMÉDIATEMENT
   // Zone de détection augmente avec les tentatives
   const detectionZone = Math.min(35, 20 + button.attempts * 1.5);
-  
+
   if (dist < detectionZone) {
     button.attempts++;
     emit("interaction", 2);
@@ -151,7 +151,7 @@ const startAutonomousMovement = () => {
       button.x = Math.max(10, Math.min(90, button.x + jitterX));
       button.y = Math.max(25, Math.min(90, button.y + jitterY));
     }
-    
+
     // Vérifier si la souris est proche et fuir
     const dist = distance(mouseX, mouseY, button.x, button.y);
     if (dist < 25) {
@@ -165,7 +165,7 @@ const handleHover = () => {
   button.attempts++;
   emit("interaction", 3);
   teleportAway(mouseX, mouseY, true);
-  
+
   // Téléportation de sécurité après 50ms
   setTimeout(() => {
     teleportAway(mouseX, mouseY, true);
@@ -178,7 +178,7 @@ const handleClick = () => {
   button.attempts += 2;
   emit("interaction", 15);
   emit("clicked", button.attempts);
-  
+
   // Triple téléportation de punition
   teleportAway(mouseX, mouseY, true);
   setTimeout(() => teleportAway(mouseX, mouseY, true), 30);
@@ -259,9 +259,7 @@ onUnmounted(() => {
       <span v-else-if="button.attempts >= 10">
         😏 Tu n'y arriveras jamais...
       </span>
-      <span v-else>
-        🎭 Continue d'essayer...
-      </span>
+      <span v-else> 🎭 Continue d'essayer... </span>
     </div>
 
     <!-- Indices visuels de chaos -->

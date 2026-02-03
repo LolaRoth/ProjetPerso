@@ -115,7 +115,10 @@
         <p class="text-xs text-zinc-600 font-mono">
           Clics inutiles sur cette page: {{ uselessClicks }}
         </p>
-        <p v-if="uselessClicks >= 10" class="text-xs text-MyPink mt-1 animate-pulse">
+        <p
+          v-if="uselessClicks >= 10"
+          class="text-xs text-MyPink mt-1 animate-pulse"
+        >
           Tu cherches quelque chose ?
         </p>
         <p v-if="uselessClicks >= 20" class="text-xs text-purple-400 mt-1">

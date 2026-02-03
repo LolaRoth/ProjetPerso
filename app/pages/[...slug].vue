@@ -99,7 +99,7 @@
           to="/"
           class="px-8 py-3 rounded-xl bg-gradient-to-r from-MyPink to-purple-600 text-white font-bricolage font-semibold hover:opacity-90 transition-all hover:scale-105 active:scale-95"
         >
-          🏠 Retour à l'accueil
+          Retour à l'accueil
         </NuxtLink>
 
         <button
@@ -135,8 +135,8 @@
         class="absolute w-1 h-1 rounded-full"
         :class="i % 2 === 0 ? 'bg-MyPink/40' : 'bg-MyBlue/40'"
         :style="{
-          left: `${10 + (i * 7) % 80}%`,
-          top: `${5 + (i * 11) % 90}%`,
+          left: `${10 + ((i * 7) % 80)}%`,
+          top: `${5 + ((i * 11) % 90)}%`,
           animation: `float ${5 + (i % 5)}s ease-in-out infinite`,
           animationDelay: `${(i % 3) * 0.5}s`,
         }"
