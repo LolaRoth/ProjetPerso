@@ -75,7 +75,15 @@ const handleColorClick = (color: string, index: number) => {
 
   // Vérifie si la séquence est complète
   if (playerSequence.value.length === sequence.value.length) {
-    message.value = `✅ Bravo ! Niveau ${level.value} réussi !`;
+    // INDICE SECRET: Affiche "violet" brièvement au niveau 3+
+    if (level.value >= 3) {
+      message.value = `✅ violet... Niveau ${level.value} réussi !`;
+      setTimeout(() => {
+        message.value = `✅ Bravo ! Niveau ${level.value} réussi !`;
+      }, 800);
+    } else {
+      message.value = `✅ Bravo ! Niveau ${level.value} réussi !`;
+    }
     emit("complete", true, level.value, sequence.value.length);
     level.value++;
     playerSequence.value = [];

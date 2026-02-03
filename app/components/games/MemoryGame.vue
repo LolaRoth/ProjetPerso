@@ -26,10 +26,11 @@ interface MemoryCard {
 }
 
 // Configuration par niveau
+// INDICE SECRET: Une paire spéciale "42" est cachée au niveau 2+
 const EMOJIS_PER_LEVEL: Record<number, string[]> = {
   1: ["🎮", "🎯", "🎪", "🎨", "🎭", "🎸"], // 6 paires = 12 cartes
-  2: ["🌟", "🌙", "☀️", "⭐", "🌈", "❄️", "🔥", "💧"], // 8 paires = 16 cartes
-  3: ["🍎", "🍊", "🍋", "🍇", "🍓", "🍒", "🥝", "🍑", "🍌", "🫐"], // 10 paires = 20 cartes
+  2: ["🌟", "🌙", "☀️", "⭐", "🌈", "❄️", "🔥", "4️⃣2️⃣"], // 8 paires = 16 cartes (42 caché!)
+  3: ["🍎", "🍊", "🍋", "🍇", "🍓", "🍒", "🥝", "🍑", "🍌", "4️⃣2️⃣"], // 10 paires = 20 cartes (42 caché!)
 };
 
 // État du jeu

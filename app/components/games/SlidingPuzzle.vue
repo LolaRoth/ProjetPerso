@@ -3,6 +3,7 @@
  * SlidingPuzzle - Taquin 3x3 avec images SVG
  * Le joueur doit remettre les tuiles dans l'ordre en glissant.
  * Deux images au choix, timer et compteur de coups.
+ * INDICE SECRET: Le mot "ISLANDE" est caché sous les pièces du puzzle
  */
 import { ref, computed, onUnmounted } from "vue";
 
@@ -13,6 +14,11 @@ const emit = defineEmits<{
 
 const GRID_SIZE = 3;
 const SVG_FILES = ["/svg/flower-cart.svg", "/svg/tel-cart.svg"];
+
+// Indice secret caché sous les pièces - réparti sur la grille 3x3
+// Les cases qui ont été "découvertes" (où une pièce a été déplacée)
+const revealedCells = ref<Set<number>>(new Set());
+const HIDDEN_HINT = ["I", "S", "L", "A", "N", "D", "E", "🇮🇸", ""]; // 9 cases
 
 const tiles = ref<number[]>([1, 2, 3, 4, 5, 6, 7, 8, 0]);
 const selectedSvg = ref(SVG_FILES[0] || "");
@@ -80,6 +86,9 @@ const shuffle = () => {
 
   tiles.value = arr;
 
+  // Réinitialiser les cellules révélées lors d'un nouveau mélange
+  revealedCells.value = new Set();
+
   game.value.active = true;
   game.value.moves = 0;
   game.value.timer = 0;
@@ -103,7 +112,13 @@ const handleTileClick = (idx: number) => {
   const colB = emptyIdx % GRID_SIZE;
 
   const dist = Math.abs(rowA - rowB) + Math.abs(colA - colB);
-  if (dist !== 1) return; // Swap
+  if (dist !== 1) return;
+
+  // Révéler la cellule où la pièce ÉTAIT (là où elle part)
+  // car c'est là que l'indice se trouve dessous
+  revealedCells.value.add(idx);
+
+  // Swap
   [tiles.value[idx], tiles.value[emptyIdx]] = [
     tiles.value[emptyIdx]!,
     tiles.value[idx]!,
@@ -178,16 +193,37 @@ onUnmounted(() => {
       </button>
     </div>
 
-    <!-- Grille du puzzle -->
-    <div class="grid grid-cols-3 gap-1 aspect-square max-w-[300px] mx-auto">
+    <!-- Grille du puzzle avec indice caché -->
+    <div
+      class="grid grid-cols-3 gap-1 aspect-square max-w-[300px] mx-auto relative"
+    >
+      <!-- Couche de fond avec l'indice caché (très subtil) -->
+      <div class="absolute inset-0 grid grid-cols-3 gap-1 pointer-events-none">
+        <div
+          v-for="(letter, idx) in HIDDEN_HINT"
+          :key="`hint-${idx}`"
+          class="aspect-square rounded-md flex items-center justify-center"
+        >
+          <!-- Lettre visible uniquement quand la case est vide ou a été révélée -->
+          <span
+            v-if="tiles[idx] === 0"
+            class="text-lg font-mono text-MyPink/60"
+            :class="{ 'text-xl': letter === '🇮🇸' }"
+          >
+            {{ letter }}
+          </span>
+        </div>
+      </div>
+
+      <!-- Couche des pièces du puzzle -->
       <button
         v-for="(tile, idx) in tiles"
         :key="idx"
-        class="aspect-square rounded-md transition-all duration-150"
+        class="aspect-square rounded-md transition-all duration-150 relative z-10"
         :class="[
           tile === 0
             ? 'bg-transparent'
-            : 'bg-zinc-800 hover:scale-95 active:scale-90 cursor-pointer border border-zinc-700',
+            : 'bg-zinc-800 hover:scale-95 active:scale-90 cursor-pointer border border-zinc-700 shadow-lg',
         ]"
         :style="getTileStyle(tile)"
         :disabled="tile === 0 || !game.active"
@@ -215,3 +251,15 @@ onUnmounted(() => {
     </button>
   </div>
 </template>
+
+<style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.5s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+</style>

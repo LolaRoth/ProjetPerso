@@ -1493,9 +1493,15 @@ import {
 import { useDegradation } from "~/composables/useDegradation";
 import { useRouter } from "vue-router";
 
-// Protection de la route - authentification obligatoire
+// Protection de la route - authentification et complétion du jeu obligatoires
 definePageMeta({
-  middleware: ["auth"],
+  middleware: ["auth", "game-complete"],
+});
+
+// SEO (pas d'indexation - page de fin secrète)
+useSeoMeta({
+  title: "Quiz Final",
+  robots: "noindex, nofollow",
 });
 
 // ==================== QUIZ ====================
@@ -1555,24 +1561,43 @@ const startFarewellSequence = () => {
 };
 
 const tryCloseWindow = () => {
-  // Tenter de fermer la fenêtre/onglet
-  // Note: Les navigateurs modernes bloquent window.close() sauf si la page a été ouverte via script
-  try {
-    window.close();
-  } catch (e) {
-    console.log("Impossible de fermer la fenêtre automatiquement");
-  }
+  // Créer un effet de fondu au noir élégant puis rediriger vers l'accueil
+  const fadeOverlay = document.createElement("div");
+  fadeOverlay.style.cssText = `
+    position: fixed;
+    inset: 0;
+    background: black;
+    z-index: 99999;
+    opacity: 0;
+    transition: opacity 2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    font-family: 'Bricolage Grotesque', sans-serif;
+    color: white;
+  `;
 
-  // Fallback: rediriger vers une page blanche ou afficher un message
+  fadeOverlay.innerHTML = `
+    <p style="font-size: 18px; opacity: 0.6; letter-spacing: 0.2em; text-transform: uppercase;">Merci d'avoir joué</p>
+  `;
+
+  document.body.appendChild(fadeOverlay);
+
+  // Déclencher le fondu
+  requestAnimationFrame(() => {
+    fadeOverlay.style.opacity = "1";
+  });
+
+  // Après le fondu, nettoyer et rediriger vers la page de bienvenue
   setTimeout(() => {
-    // Si la fenêtre ne s'est pas fermée, afficher un écran noir
-    document.body.innerHTML = `
-      <div style="position: fixed; inset: 0; background: black; display: flex; align-items: center; justify-content: center; flex-direction: column; font-family: monospace; color: white;">
-        <p style="font-size: 24px; margin-bottom: 20px;">[ FIN ]</p>
-        <p style="font-size: 14px; color: #666;">Tu peux fermer cet onglet.</p>
-      </div>
-    `;
-  }, 1000);
+    // Nettoyer le localStorage pour permettre de rejouer
+    try {
+      localStorage.removeItem("gameCompleted");
+      localStorage.removeItem("chaosTimeSpent");
+    } catch (e) {}
+    window.location.href = "/welcome";
+  }, 3000);
 };
 
 // Watcher pour déclencher l'effet TV mal branchée lors des transitions

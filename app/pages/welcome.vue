@@ -133,6 +133,12 @@ definePageMeta({
   middleware: ["auth"],
 });
 
+// SEO (pas d'indexation - page privée)
+useSeoMeta({
+  title: "Bienvenue",
+  robots: "noindex, nofollow",
+});
+
 const router = useRouter();
 
 const { profile, user, isAuthenticated, initialized, initAuth } = useAuth();

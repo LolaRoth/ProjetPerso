@@ -196,6 +196,19 @@ definePageMeta({
   middleware: ["guest"],
 });
 
+// SEO
+useSeoMeta({
+  title: "Inscription",
+  description:
+    "Créez votre compte Experience pour sauvegarder vos scores, suivre votre progression et rejoindre la communauté.",
+  ogTitle: "Inscription - Experience",
+  ogDescription: "Rejoignez Experience et plongez dans le chaos !",
+});
+
+useHead({
+  link: [{ rel: "canonical", href: "https://experience.fr/register" }],
+});
+
 const router = useRouter();
 const { signUp, isAuthenticated } = useAuth();
 

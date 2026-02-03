@@ -1,2 +1,31 @@
-User-Agent: *
-Disallow:
+# Robots.txt pour Experience
+# https://experience.fr
+
+User-agent: *
+Allow: /
+
+# Pages autorisées
+Allow: /login
+Allow: /register
+Allow: /welcome
+
+# Pages protégées (nécessitent authentification ou état spécial)
+Disallow: /fin
+Disallow: /profile
+Disallow: /auth/
+
+# Fichiers statiques autorisés
+Allow: /svg/
+Allow: /font/
+Allow: /*.css
+Allow: /*.js
+Allow: /*.svg
+Allow: /*.png
+Allow: /*.jpg
+Allow: /*.webp
+
+# Sitemap
+Sitemap: https://experience.fr/sitemap.xml
+
+# Crawl-delay pour éviter la surcharge (optionnel)
+Crawl-delay: 1

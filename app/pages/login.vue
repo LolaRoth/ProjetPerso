@@ -214,6 +214,19 @@ definePageMeta({
   middleware: ["guest"],
 });
 
+// SEO
+useSeoMeta({
+  title: "Connexion",
+  description:
+    "Connectez-vous à Experience pour sauvegarder votre progression et accéder à votre profil.",
+  ogTitle: "Connexion - Experience",
+  ogDescription: "Connectez-vous pour vivre l'expérience complète.",
+});
+
+useHead({
+  link: [{ rel: "canonical", href: "https://experience.fr/login" }],
+});
+
 const router = useRouter();
 const { signIn, signInWithGoogle, isAuthenticated } = useAuth();
 

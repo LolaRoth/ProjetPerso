@@ -11,6 +11,12 @@ definePageMeta({
   middleware: ["auth"],
 });
 
+// SEO (pas d'indexation - page privée, mais titre pour l'onglet)
+useSeoMeta({
+  title: "Experience",
+  robots: "noindex, nofollow",
+});
+
 const nuxtApp = useNuxtApp();
 const router = useRouter();
 const gsap = nuxtApp.$gsap as any;
@@ -68,15 +74,20 @@ const getGameDestructionStyle = (seed: number, intensity: number = 1) => {
     transform: `translate(${offset.x}px, ${offset.y}px) rotate(${offset.rotation * 0.5}deg) scale(${offset.scale})`,
     filter:
       level > 0.5
-        ? `hue-rotate(${Math.sin(scrollOffset.value * 0.05 + seed) * 20 * level}deg)`
+        ? `hue-rotate(${Math.sin(scrollOffset.value * 0.05 + seed) * 10 * level}deg)`
         : "none",
     transition: "transform 0.3s ease, filter 0.5s ease",
   };
 };
 
 // ===== AUTH & GAME STATS =====
-const { isAuthenticated } = useAuth();
+const { isAuthenticated, profile } = useAuth();
 const { recordSession } = useGameStats();
+
+// ===== PROFIL FLOTTANT (se déplace aléatoirement pendant le chaos) =====
+// NOTE: Les fonctions et le watch sont définis plus bas, après "degradation"
+const floatingProfilePosition = ref({ x: 85, y: 5 }); // Position initiale en haut à droite (%)
+let floatingProfileInterval: ReturnType<typeof setInterval> | null = null;
 
 // Helper pour enregistrer une session si connecté
 const saveGameSession = async (
@@ -359,6 +370,49 @@ watch(degradationLevel, () => {
   // Afficher une phrase de personnalité quand on franchit certains seuils
   checkPersonalityPhrase();
 });
+
+// ===== PROFIL FLOTTANT - Fonctions (après définition de degradation) =====
+// Déplace le profil à une position aléatoire
+const moveFloatingProfile = () => {
+  floatingProfilePosition.value = {
+    x: 10 + Math.random() * 75, // 10% à 85% de la largeur
+    y: 5 + Math.random() * 80, // 5% à 85% de la hauteur
+  };
+};
+
+// Démarre le déplacement périodique du profil
+const startFloatingProfile = () => {
+  if (floatingProfileInterval) return;
+
+  const moveProfile = () => {
+    moveFloatingProfile();
+    const nextMove = 8000 - degradation.level * 5000; // 8s -> 3s
+    floatingProfileInterval = setTimeout(moveProfile, nextMove);
+  };
+
+  moveProfile();
+};
+
+// Arrête le déplacement du profil
+const stopFloatingProfile = () => {
+  if (floatingProfileInterval) {
+    clearTimeout(floatingProfileInterval);
+    floatingProfileInterval = null;
+  }
+};
+
+// Observe le niveau de dégradation pour activer le profil flottant
+watch(
+  () => degradation.level,
+  (level) => {
+    if (level > 0.3 && isAuthenticated.value && !floatingProfileInterval) {
+      startFloatingProfile();
+    } else if (level <= 0.3) {
+      stopFloatingProfile();
+      floatingProfilePosition.value = { x: 85, y: 5 };
+    }
+  },
+);
 
 // ===== SYSTÈME DE PERSONNALITÉ DU SITE =====
 const personalityPhrases = [
@@ -794,34 +848,104 @@ const handleSequenceClick = (color: string, index: number) => {
 };
 
 // ===== INTERACTIVE: Click Counter Challenge =====
+// Compteur de victoires pour difficulté progressive
+const clickChallengeWins = ref(0);
+const baseClickTarget = 12; // Objectif de base
+
 const clickChallenge = ref({
-  target: 20,
+  target: baseClickTarget,
   current: 0,
   active: false,
   started: false, // Timer démarre uniquement au premier clic
   timeLeft: 5,
 });
+
+// Position du bouton qui bouge (pour dégradation élevée)
+const clickButtonOffset = ref({ x: 0, y: 0 });
+let clickButtonMoveInterval: ReturnType<typeof setInterval> | null = null;
 let clickChallengeInterval: ReturnType<typeof setInterval> | null = null;
 
+// Fonction pour faire bouger le bouton de manière TRÈS erratique - pratiquement inutilisable en chaos max
+const startClickButtonMovement = () => {
+  if (clickButtonMoveInterval) clearInterval(clickButtonMoveInterval);
+
+  // Plus le chaos est élevé, plus le bouton bouge vite et fort
+  const updateSpeed = Math.max(16, 50 - degradation.level * 40); // 50ms -> 10ms
+
+  clickButtonMoveInterval = setInterval(() => {
+    if (!clickChallenge.value.active || !clickChallenge.value.started) {
+      clickButtonOffset.value = { x: 0, y: 0 };
+      return;
+    }
+
+    // Amplitude MASSIVE basée sur le niveau de dégradation
+    // À 50% : léger mouvement, à 100% : le bouton traverse l'écran
+    const chaosIntensity = Math.pow((degradation.level - 0.3) / 0.7, 2); // Courbe exponentielle
+    const baseAmplitude = 50 + chaosIntensity * 200; // 50px -> 250px
+    const randomFactor = 0.3 + chaosIntensity * 0.7; // Plus de random en chaos max
+    const speed = 1 + chaosIntensity * 5;
+
+    // Mouvement sinusoïdal + sauts aléatoires
+    const time = Date.now() * 0.001;
+    const sinX = Math.sin(time * speed * 2.3) * baseAmplitude;
+    const sinY = Math.cos(time * speed * 1.7) * baseAmplitude * 0.8;
+    const randomX = (Math.random() - 0.5) * baseAmplitude * randomFactor * 2;
+    const randomY = (Math.random() - 0.5) * baseAmplitude * randomFactor * 2;
+
+    // Téléportation occasionnelle en chaos extrême (>80%)
+    const shouldTeleport = degradation.level > 0.8 && Math.random() < 0.1;
+
+    clickButtonOffset.value = {
+      x: shouldTeleport ? (Math.random() - 0.5) * 400 : sinX + randomX,
+      y: shouldTeleport ? (Math.random() - 0.5) * 300 : sinY + randomY,
+    };
+  }, updateSpeed);
+};
+
+const stopClickButtonMovement = () => {
+  if (clickButtonMoveInterval) {
+    clearInterval(clickButtonMoveInterval);
+    clickButtonMoveInterval = null;
+  }
+  clickButtonOffset.value = { x: 0, y: 0 };
+};
+
 const prepareClickChallenge = () => {
-  // Prépare le jeu mais ne démarre pas le timer
+  // Calcul de l'objectif: base + victoires*3 + dégradation*10
+  const targetFromWins = baseClickTarget + clickChallengeWins.value * 3;
+  const targetFromDegradation = Math.floor(degradation.level * 10);
+
   clickChallenge.value = {
-    target: 15 + Math.floor(degradation.level * 20),
+    target: targetFromWins + targetFromDegradation,
     current: 0,
     active: true,
     started: false,
     timeLeft: 5,
   };
+
+  // Réinitialiser la position du bouton
+  clickButtonOffset.value = { x: 0, y: 0 };
+
+  // Démarrer le mouvement si dégradation > 0.3 (commence tôt, devient fou après)
+  if (degradation.level > 0.3) {
+    startClickButtonMovement();
+  }
 };
 
 const startClickChallengeTimer = () => {
   if (clickChallenge.value.started) return;
   clickChallenge.value.started = true;
 
+  // S'assurer que le mouvement est actif pendant le jeu
+  if (degradation.level > 0.3 && !clickButtonMoveInterval) {
+    startClickButtonMovement();
+  }
+
   clickChallengeInterval = setInterval(() => {
     clickChallenge.value.timeLeft--;
     if (clickChallenge.value.timeLeft <= 0) {
       if (clickChallengeInterval) clearInterval(clickChallengeInterval);
+      stopClickButtonMovement();
       const won = clickChallenge.value.current >= clickChallenge.value.target;
       saveGameSession(
         "click-challenge",
@@ -831,9 +955,11 @@ const startClickChallengeTimer = () => {
         {
           target: clickChallenge.value.target,
           current: clickChallenge.value.current,
+          level: clickChallengeWins.value + 1,
         },
       );
       if (won) {
+        clickChallengeWins.value++;
         degradation.puzzlesSolved++;
         calculateLevel();
       }
@@ -855,6 +981,8 @@ const handleChallengeClick = () => {
   // Victoire immédiate si objectif atteint
   if (clickChallenge.value.current >= clickChallenge.value.target) {
     if (clickChallengeInterval) clearInterval(clickChallengeInterval);
+    stopClickButtonMovement();
+    clickChallengeWins.value++;
     saveGameSession(
       "click-challenge",
       clickChallenge.value.current,
@@ -863,6 +991,7 @@ const handleChallengeClick = () => {
       {
         target: clickChallenge.value.target,
         current: clickChallenge.value.current,
+        level: clickChallengeWins.value,
       },
     );
     degradation.puzzlesSolved++;
@@ -2074,8 +2203,9 @@ const handleSecretClick = async () => {
   if (!gameWon.value) {
     gameWon.value = true;
 
-    // Save time spent to localStorage for the fin page
+    // Save completion status and time spent to localStorage for the fin page
     try {
+      localStorage.setItem("gameCompleted", "true");
       localStorage.setItem("chaosTimeSpent", String(degradation.timeSpent));
     } catch (e) {}
 
@@ -2740,6 +2870,7 @@ onUnmounted(() => {
   if (timeInterval) clearInterval(timeInterval);
   if (fallInterval) clearInterval(fallInterval);
   if (clickChallengeInterval) clearInterval(clickChallengeInterval);
+  if (clickButtonMoveInterval) clearInterval(clickButtonMoveInterval);
   if (dynamicElementsInterval) clearInterval(dynamicElementsInterval);
   if (floatingAnimationInterval) clearInterval(floatingAnimationInterval);
   if (decorativeInterval) clearInterval(decorativeInterval);
@@ -2751,6 +2882,7 @@ onUnmounted(() => {
   if (slidingTimerInterval) clearInterval(slidingTimerInterval);
   if (catchGameInterval) clearInterval(catchGameInterval);
   if (catchGameSpawnInterval) clearInterval(catchGameSpawnInterval);
+  if (floatingProfileInterval) clearTimeout(floatingProfileInterval);
   if (ScrollTrigger) ScrollTrigger.getAll().forEach((t: any) => t.kill());
   // cleanup cursor loop and native cursor class
   stopCursorLoop();
@@ -2798,6 +2930,82 @@ onUnmounted(() => {
           </div>
         </div>
       </div>
+    </Transition>
+
+    <!-- ===== PROFIL FLOTTANT (accessible pendant le chaos) ===== -->
+    <Transition name="fade">
+      <NuxtLink
+        v-if="isAuthenticated && degradationLevel > 0.3"
+        to="/profile"
+        class="fixed z-[100] group"
+        :style="{
+          left: `${floatingProfilePosition.x}%`,
+          top: `${floatingProfilePosition.y}%`,
+          transform: 'translate(-50%, -50%)',
+          transition: 'left 1s ease-in-out, top 1s ease-in-out',
+        }"
+      >
+        <div
+          class="flex items-center gap-2 px-3 py-2 rounded-full bg-black/80 border border-MyPink/30 hover:border-MyPink/60 backdrop-blur-sm transition-all duration-300 hover:scale-105"
+          :class="{
+            'shake-subtle': degradationLevel > 0.6,
+            'animate-pulse': degradationLevel > 0.8,
+          }"
+        >
+          <!-- Avatar -->
+          <div class="relative">
+            <div
+              v-if="profile?.avatar_url"
+              class="w-8 h-8 rounded-full overflow-hidden ring-2 ring-MyPink/30 group-hover:ring-MyPink/60"
+            >
+              <img
+                :src="profile.avatar_url"
+                :alt="profile?.username || 'Profil'"
+                class="w-full h-full object-cover"
+              />
+            </div>
+            <div
+              v-else
+              class="w-8 h-8 rounded-full flex items-center justify-center text-white font-medium text-sm ring-2 ring-MyPink/30 group-hover:ring-MyPink/60"
+              style="background: linear-gradient(135deg, #8b5cf6, #ec4899)"
+            >
+              {{ profile?.username?.[0]?.toUpperCase() || "?" }}
+            </div>
+            <!-- Indicateur online -->
+            <span
+              class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-MyGreen rounded-full border-2 border-black"
+            ></span>
+          </div>
+          <!-- Nom (visible seulement si pas trop de chaos) -->
+          <span
+            v-if="degradationLevel < 0.7"
+            class="text-sm text-gray-300 group-hover:text-white transition-colors max-w-[100px] truncate"
+          >
+            {{ profile?.username || "Profil" }}
+          </span>
+          <!-- Flèche -->
+          <svg
+            class="w-4 h-4 text-MyPink/60 group-hover:text-MyPink transition-colors"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M9 5l7 7-7 7"
+            />
+          </svg>
+        </div>
+        <!-- Message d'aide qui apparaît parfois -->
+        <div
+          v-if="degradationLevel > 0.5 && Math.random() > 0.7"
+          class="absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs text-MyPink/50 font-bricolage"
+        >
+          ton profil est là →
+        </div>
+      </NuxtLink>
     </Transition>
 
     <!-- FLOATING GEOMETRIC SHAPES (plus de formes décoratives) -->
@@ -2863,7 +3071,7 @@ onUnmounted(() => {
               ? degradationLevel * 4
               : Math.min(0.75, 0.2 + (degradationLevel - 0.05) * 1.1),
           color: s.color,
-          filter: `drop-shadow(0 0 ${Math.max(0, degradationLevel - 0.1) * 18}px ${s.color}) hue-rotate(${degradationLevel * 140}deg)`,
+          filter: `drop-shadow(0 0 ${Math.max(0, degradationLevel - 0.1) * 18}px ${s.color}) hue-rotate(${degradationLevel * 60}deg)`,
         }"
       >
         <template v-if="s.type === 'rect'">
@@ -2934,7 +3142,7 @@ onUnmounted(() => {
             degradationLevel < 0.05
               ? degradationLevel * 3
               : Math.min(0.75, 0.15 + (degradationLevel - 0.05) * 0.9),
-          filter: `hue-rotate(${degradationLevel * 90}deg)`,
+          filter: `hue-rotate(${degradationLevel * 40}deg)`,
         }"
       >
         ⭐
@@ -2948,7 +3156,7 @@ onUnmounted(() => {
             degradationLevel < 0.08
               ? degradationLevel * 2.5
               : Math.min(0.8, 0.2 + (degradationLevel - 0.08) * 1.0),
-          filter: `hue-rotate(${degradationLevel * 120}deg)`,
+          filter: `hue-rotate(${degradationLevel * 50}deg)`,
           animationDelay: '1s',
         }"
       >
@@ -2963,7 +3171,7 @@ onUnmounted(() => {
             degradationLevel < 0.1
               ? degradationLevel * 2
               : Math.min(0.7, 0.2 + (degradationLevel - 0.1) * 0.8),
-          filter: `hue-rotate(${degradationLevel * 60}deg)`,
+          filter: `hue-rotate(${degradationLevel * 30}deg)`,
         }"
       >
         🌟
@@ -2977,7 +3185,7 @@ onUnmounted(() => {
             degradationLevel < 0.12
               ? degradationLevel * 1.5
               : Math.min(0.7, 0.18 + (degradationLevel - 0.12) * 0.85),
-          filter: `hue-rotate(${degradationLevel * 150}deg)`,
+          filter: `hue-rotate(${degradationLevel * 60}deg)`,
           animationDelay: '2s',
         }"
       >
@@ -2992,7 +3200,7 @@ onUnmounted(() => {
             degradationLevel < 0.15
               ? degradationLevel * 1.2
               : Math.min(0.75, 0.18 + (degradationLevel - 0.15) * 0.95),
-          filter: `hue-rotate(${degradationLevel * 180}deg)`,
+          filter: `hue-rotate(${degradationLevel * 70}deg)`,
         }"
       >
         ⭐
@@ -4140,7 +4348,7 @@ onUnmounted(() => {
                     :class="{ 'rgb-split': degradationLevel > 0.7 }"
                     :style="{
                       fontSize: `${star.size * (1 + (degradationLevel > 0.5 ? Math.sin(scrollOffset / 500 + star.id) * 0.2 * degradationLevel : 0))}px`,
-                      filter: `drop-shadow(0 0 10px ${star.color}) ${degradationLevel > 0.6 ? `hue-rotate(${Math.sin(scrollOffset / 400 + star.id) * degradationLevel * 60}deg)` : ''}`,
+                      filter: `drop-shadow(0 0 10px ${star.color}) ${degradationLevel > 0.6 ? `hue-rotate(${Math.sin(scrollOffset / 400 + star.id) * degradationLevel * 30}deg)` : ''}`,
                     }"
                     >⭐</span
                   >
@@ -4262,11 +4470,25 @@ onUnmounted(() => {
             >État du système</span
           >
         </h2>
-        <!-- Élément discret: Mot (Éphémère) -->
+        <!-- Élément discret: Mot (Éphémère) - reste visible pendant le chaos -->
         <p
-          class="text-center text-xs text-MyYellow/50 font-bricolage mt-2 tracking-[0.4em] transition-all duration-300 hover:text-MyYellow/80 cursor-default select-none discrete-hint"
+          class="text-center text-xs font-bricolage mt-2 tracking-[0.4em] cursor-default select-none transition-all duration-1000 ease-out"
+          :class="[
+            degradationLevel > 0.7 ? 'text-MyYellow/60' : 'text-MyYellow/40',
+            { 'animate-pulse': degradationLevel > 0.6 },
+          ]"
+          :style="{
+            textShadow:
+              degradationLevel > 0.5
+                ? '0 0 10px rgba(255, 247, 70, 0.3)'
+                : 'none',
+            transform:
+              degradationLevel > 0.6
+                ? `translateX(${Math.sin(Date.now() * 0.001) * 2}px)`
+                : 'none',
+          }"
         >
-          ÉPHÉMÈRE
+          {{ degradationLevel > 0.8 ? "ÉPHÉM3R3" : "ÉPHÉMÈRE" }}
         </p>
 
         <div class="mt-12 grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -4347,11 +4569,21 @@ onUnmounted(() => {
         <div
           class="absolute bottom-32 left-16 w-24 h-24 bg-MyYellow/5 rounded-full blur-2xl animate-parallax-float"
         />
-        <!-- Élément discret: Nombre (42) -->
+        <!-- Élément discret: Nombre (42) - reste visible pendant le chaos -->
         <div
-          class="absolute bottom-6 right-6 font-mono text-lg text-MyGreen/50 tracking-widest transition-all duration-300 hover:text-MyGreen/80 hover:scale-110 cursor-default select-none discrete-hint"
+          class="absolute bottom-6 right-6 font-mono text-lg tracking-widest cursor-default select-none transition-all duration-1000 ease-out z-20"
+          :class="[
+            degradationLevel > 0.7 ? 'text-MyGreen/70' : 'text-MyGreen/40',
+            { 'animate-pulse': degradationLevel > 0.5 },
+          ]"
+          :style="{
+            textShadow:
+              degradationLevel > 0.4
+                ? '0 0 8px rgba(187, 255, 66, 0.4)'
+                : 'none',
+          }"
         >
-          42
+          {{ degradationLevel > 0.8 ? "4.2" : "42" }}
         </div>
       </div>
 
@@ -4512,14 +4744,20 @@ onUnmounted(() => {
       class="reveal-section relative min-h-screen px-6 py-24"
       :class="{ 'vhs-tracking': degradationLevel > 0.7 }"
     >
-      <!-- Élément discret: Sablier -->
+      <!-- Élément discret: Sablier - reste visible pendant le chaos -->
       <div
-        class="absolute top-8 left-8 text-3xl transition-all duration-300 hover:scale-125 cursor-default select-none discrete-hint"
+        class="absolute top-8 left-8 text-2xl cursor-default select-none transition-all duration-1000 ease-out z-20"
+        :class="[
+          degradationLevel > 0.6 ? 'opacity-70' : 'opacity-50',
+          { 'animate-bounce': degradationLevel > 0.7 },
+        ]"
         :style="{
-          opacity: 0.65,
-          ...(degradationLevel > 0.5 ? getDestructionStyle(130, 40) : {}),
+          filter:
+            degradationLevel > 0.5
+              ? 'drop-shadow(0 0 6px rgba(107, 255, 255, 0.5))'
+              : 'none',
+          ...(degradationLevel > 0.5 ? getDestructionStyle(130, 20) : {}),
         }"
-        :class="{ 'shake-medium': degradationLevel > 0.6 }"
       >
         ⏳
       </div>
@@ -4557,17 +4795,29 @@ onUnmounted(() => {
           class="mt-10"
           :class="{ 'destruction-zone': degradationLevel > 0.6 }"
         >
-          <p
-            class="font-bricolage text-zinc-500 mb-4"
-            :class="{ 'text-corrupt': degradationLevel > 0.7 }"
-            :style="degradationLevel > 0.5 ? getDestructionStyle(141, 15) : {}"
-          >
-            {{
-              degradationLevel > 0.8
-                ? "Cl1qu3 l3 plu5 v1t3 p0ss1bl3 en 5 s3c0nd35 !"
-                : "Clique le plus vite possible en 5 secondes !"
-            }}
-          </p>
+          <!-- Titre avec niveau de difficulté -->
+          <div class="flex items-center justify-center gap-4 mb-4">
+            <p
+              class="font-bricolage text-zinc-500"
+              :class="{ 'text-corrupt': degradationLevel > 0.7 }"
+              :style="
+                degradationLevel > 0.5 ? getDestructionStyle(141, 15) : {}
+              "
+            >
+              {{
+                degradationLevel > 0.8
+                  ? "Cl1qu3 l3 plu5 v1t3 p0ss1bl3 en 5 s3c0nd35 !"
+                  : "Clique le plus vite possible en 5 secondes !"
+              }}
+            </p>
+            <!-- Badge niveau -->
+            <span
+              v-if="clickChallengeWins > 0"
+              class="px-2 py-0.5 rounded-full text-xs font-mono bg-MyYellow/20 text-MyYellow"
+            >
+              🏆 Niv.{{ clickChallengeWins + 1 }}
+            </span>
+          </div>
 
           <!-- Timer et statut - se déstructure -->
           <div
@@ -4592,43 +4842,86 @@ onUnmounted(() => {
             </span>
           </div>
 
-          <!-- Bouton principal toujours visible - SE CASSE AVEC LA DÉGRADATION -->
-          <button
-            v-if="!clickChallenge.active"
-            class="h-48 w-48 rounded-full bg-gradient-to-br from-zinc-700 to-zinc-800 font-candy text-4xl text-zinc-400 hover:from-MyPink hover:to-MyBlue hover:text-white hover:scale-105 active:scale-95 transition-all mx-auto block border-2 border-zinc-600 hover:border-transparent relative overflow-hidden"
-            :class="{
-              'button-broken': degradationLevel > 0.7,
-              distort: degradationLevel > 0.6,
+          <!-- Conteneur du bouton avec zone de mouvement ÉLARGIE pour le chaos -->
+          <div
+            class="relative mx-auto overflow-visible"
+            :style="{
+              width: degradationLevel > 0.5 ? '400px' : '200px',
+              height: degradationLevel > 0.5 ? '350px' : '200px',
+              transition: 'width 1s, height 1s',
             }"
-            :style="
-              degradationLevel > 0.4 ? getGameDestructionStyle(143, 1.2) : {}
-            "
-            @click="prepareClickChallenge"
           >
-            {{ degradationLevel > 0.8 ? "G0" : "GO" }}
-            <div
-              v-if="degradationLevel > 0.6"
-              class="absolute inset-0 noise-overlay opacity-20 pointer-events-none"
-            />
-          </button>
-          <button
-            v-else
-            class="h-48 w-48 rounded-full bg-gradient-to-br from-MyPink to-MyBlue font-candy text-4xl text-white hover:scale-105 active:scale-95 transition-transform mx-auto block relative overflow-hidden"
+            <!-- Bouton principal toujours visible - SE CASSE AVEC LA DÉGRADATION -->
+            <button
+              v-if="!clickChallenge.active"
+              class="absolute inset-0 h-48 w-48 rounded-full bg-gradient-to-br from-zinc-700 to-zinc-800 font-candy text-4xl text-zinc-400 hover:from-MyPink hover:to-MyBlue hover:text-white hover:scale-105 active:scale-95 transition-all m-auto border-2 border-zinc-600 hover:border-transparent overflow-hidden"
+              :class="{
+                'button-broken': degradationLevel > 0.7,
+                distort: degradationLevel > 0.6,
+              }"
+              :style="
+                degradationLevel > 0.4 ? getGameDestructionStyle(143, 1.2) : {}
+              "
+              @click="prepareClickChallenge"
+            >
+              {{ degradationLevel > 0.8 ? "G0" : "GO" }}
+              <div
+                v-if="degradationLevel > 0.6"
+                class="absolute inset-0 noise-overlay opacity-20 pointer-events-none"
+              />
+            </button>
+            <!-- Bouton actif qui bouge avec la dégradation - CHAOTIQUE à haut niveau -->
+            <button
+              v-else
+              class="absolute h-48 w-48 rounded-full bg-gradient-to-br from-MyPink to-MyBlue font-candy text-4xl text-white active:scale-95 overflow-hidden"
+              :class="{
+                'game-glitch': degradationLevel > 0.7,
+                'shadow-lg shadow-MyPink/40':
+                  degradationLevel > 0.3 && clickChallenge.started,
+                'ring-4 ring-red-500/50 animate-pulse':
+                  degradationLevel > 0.8 && clickChallenge.started,
+              }"
+              :style="{
+                top: '50%',
+                left: '50%',
+                transform: `translate(-50%, -50%) translate(${clickButtonOffset.x}px, ${clickButtonOffset.y}px)`,
+                transition:
+                  degradationLevel > 0.3 && clickChallenge.started
+                    ? 'none'
+                    : 'transform 0.2s',
+                ...(degradationLevel > 0.5
+                  ? getGameDestructionStyle(144, 1.5)
+                  : {}),
+              }"
+              @click="handleChallengeClick"
+            >
+              {{ clickChallenge.current }}
+              <div
+                v-if="degradationLevel > 0.5"
+                class="absolute inset-0 noise-overlay opacity-30 pointer-events-none"
+              />
+            </button>
+          </div>
+
+          <!-- Avertissement bouton instable - progressif -->
+          <p
+            v-if="degradationLevel > 0.3 && clickChallenge.started"
+            class="mt-2 text-xs font-bricolage animate-pulse"
             :class="{
-              'shake-medium': degradationLevel > 0.6 && clickChallenge.started,
-              'game-glitch': degradationLevel > 0.7,
+              'text-yellow-400/70': degradationLevel < 0.6,
+              'text-orange-400/80':
+                degradationLevel >= 0.6 && degradationLevel < 0.8,
+              'text-red-500': degradationLevel >= 0.8,
             }"
-            :style="
-              degradationLevel > 0.5 ? getGameDestructionStyle(144, 1.5) : {}
-            "
-            @click="handleChallengeClick"
           >
-            {{ clickChallenge.current }}
-            <div
-              v-if="degradationLevel > 0.5"
-              class="absolute inset-0 noise-overlay opacity-30 pointer-events-none"
-            />
-          </button>
+            {{
+              degradationLevel >= 0.8
+                ? "🚨 BOUTON INCONTRÔLABLE !"
+                : degradationLevel >= 0.6
+                  ? "⚠️ Le bouton devient fou..."
+                  : "⚠️ Le bouton bouge..."
+            }}
+          </p>
 
           <p
             v-if="!clickChallenge.active"
@@ -4708,11 +5001,19 @@ onUnmounted(() => {
         :style="{ opacity: degradationLevel * 0.3 }"
       />
 
-      <!-- Élément discret: Couleur (violet) -->
+      <!-- Élément discret: Couleur (violet) - reste visible pendant le chaos -->
       <div
-        class="absolute bottom-1/3 left-4 text-xs text-purple-400/60 font-bricolage tracking-wide -rotate-90 origin-left transition-all duration-300 hover:text-purple-400/90 cursor-default select-none discrete-hint"
-        :style="degradationLevel > 0.5 ? getDestructionStyle(150, 50) : {}"
-        :class="{ flicker: degradationLevel > 0.6 }"
+        class="absolute bottom-1/3 left-4 text-xs font-bricolage tracking-wide -rotate-90 origin-left cursor-default select-none transition-all duration-1000 ease-out z-20"
+        :class="[
+          degradationLevel > 0.6 ? 'text-purple-400/70' : 'text-purple-400/50',
+        ]"
+        :style="{
+          textShadow:
+            degradationLevel > 0.5
+              ? '0 0 8px rgba(167, 139, 250, 0.4)'
+              : 'none',
+          ...(degradationLevel > 0.6 ? getDestructionStyle(150, 25) : {}),
+        }"
       >
         {{ degradationLevel > 0.7 ? "t31nt3 : v10l3t" : "teinte : violet" }}
       </div>
@@ -4934,7 +5235,7 @@ onUnmounted(() => {
               transform: `translate(-50%, -50%) rotate(${degradationLevel > 0.5 ? Math.sin(scrollOffset / 800 + target.id) * degradationLevel * 15 : 0}deg)`,
               filter:
                 degradationLevel > 0.6
-                  ? `hue-rotate(${Math.sin(scrollOffset / 600 + target.id) * degradationLevel * 60}deg)`
+                  ? `hue-rotate(${Math.sin(scrollOffset / 600 + target.id) * degradationLevel * 30}deg)`
                   : 'none',
             }"
             @click="hitTarget(target.id)"
@@ -5052,22 +5353,33 @@ onUnmounted(() => {
         :style="{ opacity: degradationLevel * 0.25 }"
       />
 
-      <!-- Élément discret: Symbole infini - devient chaotique -->
+      <!-- Élément discret: Symbole infini - reste visible pendant le chaos -->
       <div
-        class="absolute top-12 right-8 text-MyBlue/50 text-7xl font-light transition-all duration-300 hover:text-MyBlue/70 hover:scale-110 cursor-default select-none discrete-hint animate-pulse-slow"
-        :style="degradationLevel > 0.5 ? getDestructionStyle(200, 60) : {}"
-        :class="{
-          'shake-medium': degradationLevel > 0.7,
-          'rgb-split': degradationLevel > 0.8,
+        class="absolute top-12 right-8 text-6xl font-light cursor-default select-none animate-pulse-slow transition-all duration-1000 ease-out z-20"
+        :class="[degradationLevel > 0.6 ? 'text-MyBlue/60' : 'text-MyBlue/40']"
+        :style="{
+          textShadow:
+            degradationLevel > 0.5
+              ? '0 0 15px rgba(107, 255, 255, 0.4)'
+              : 'none',
+          ...(degradationLevel > 0.6 ? getDestructionStyle(200, 30) : {}),
         }"
       >
         {{ degradationLevel > 0.8 ? "∅" : "∞" }}
       </div>
-      <!-- Élément discret: Pays - se corrompt -->
+      <!-- Élément discret: Pays - reste visible pendant le chaos -->
       <div
-        class="absolute bottom-6 right-6 font-bricolage text-xs text-zinc-500/60 tracking-widest transition-all duration-300 hover:text-MyPink/80 cursor-default select-none discrete-hint"
-        :style="degradationLevel > 0.5 ? getDestructionStyle(201, 40) : {}"
-        :class="{ flicker: degradationLevel > 0.6 }"
+        class="absolute bottom-6 right-6 font-bricolage text-xs tracking-widest cursor-default select-none transition-all duration-1000 ease-out z-20"
+        :class="[
+          degradationLevel > 0.6 ? 'text-MyPink/60' : 'text-zinc-500/50',
+        ]"
+        :style="{
+          textShadow:
+            degradationLevel > 0.5
+              ? '0 0 8px rgba(255, 102, 200, 0.3)'
+              : 'none',
+          ...(degradationLevel > 0.6 ? getDestructionStyle(201, 20) : {}),
+        }"
       >
         {{ degradationLevel > 0.7 ? "d3s1gn · 1sl4nd3" : "design · islande" }}
       </div>
@@ -5205,7 +5517,7 @@ onUnmounted(() => {
                         ...(degradationLevel > 0.4
                           ? {
                               transform: `translate(${Math.sin(scrollOffset / 1000 + tile) * degradationLevel * 8}px, ${Math.cos(scrollOffset / 1000 + tile) * degradationLevel * 8}px) rotate(${Math.sin(scrollOffset / 800 + tile) * degradationLevel * 10}deg)`,
-                              filter: `hue-rotate(${Math.sin(scrollOffset / 500 + tile) * degradationLevel * 40}deg)`,
+                              filter: `hue-rotate(${Math.sin(scrollOffset / 500 + tile) * degradationLevel * 20}deg)`,
                             }
                           : {}),
                       },
@@ -5468,7 +5780,7 @@ onUnmounted(() => {
               degradationLevel > 0.4
                 ? {
                     transform: `translate(${Math.sin(scrollOffset / 1000 + card.id) * degradationLevel * 6}px, ${Math.cos(scrollOffset / 1000 + card.id) * degradationLevel * 6}px) rotate(${Math.sin(scrollOffset / 800 + card.id) * degradationLevel * 8}deg)`,
-                    filter: `hue-rotate(${Math.sin(scrollOffset / 500 + card.id) * degradationLevel * 30}deg)`,
+                    filter: `hue-rotate(${Math.sin(scrollOffset / 500 + card.id) * degradationLevel * 15}deg)`,
                   }
                 : {}
             "

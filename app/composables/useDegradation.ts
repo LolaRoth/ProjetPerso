@@ -129,25 +129,32 @@ export function useDegradation() {
     updateSpecialEffects();
   };
 
-  // Mise à jour des effets spéciaux selon le niveau - plus léger
+  // Mise à jour des effets spéciaux selon le niveau - transitions fluides
   const updateSpecialEffects = () => {
     const l = state.level;
 
-    // Glitch: commence plus tard, moins intense
+    // Glitch: commence plus tard, progression très douce avec easing
+    const glitchTarget = l > 0.15 ? Math.pow((l - 0.15) / 0.85, 2) * 0.5 : 0;
     state.glitchIntensity =
-      l > 0.15 ? Math.pow((l - 0.15) / 0.85, 1.5) * 0.6 : 0;
+      state.glitchIntensity + (glitchTarget - state.glitchIntensity) * 0.1;
 
-    // Rotation chaos: réduit
-    state.rotationChaos = l > 0.25 ? (l - 0.25) * 25 : 0; // Max 18.75 degrés
+    // Rotation chaos: progression douce
+    const rotationTarget = l > 0.25 ? (l - 0.25) * 20 : 0; // Max 15 degrés
+    state.rotationChaos =
+      state.rotationChaos + (rotationTarget - state.rotationChaos) * 0.1;
 
-    // Décalage de couleur - plus subtil
-    state.colorShift = l * 40; // Max 40 degrés de hue shift
+    // Décalage de couleur - très progressif et subtil
+    const colorTarget = l * 25; // Max 25 degrés de hue shift (réduit de 40)
+    state.colorShift =
+      state.colorShift + (colorTarget - state.colorShift) * 0.05;
 
-    // Corruption du texte - réduite
-    state.textCorruption = l > 0.5 ? (l - 0.5) * 0.5 : 0; // Max 25%
+    // Corruption du texte - très progressive
+    const corruptionTarget = l > 0.5 ? (l - 0.5) * 0.4 : 0; // Max 20%
+    state.textCorruption =
+      state.textCorruption + (corruptionTarget - state.textCorruption) * 0.08;
   };
 
-  // Déclencher une transition de phase avec animation
+  // Déclencher une transition de phase avec animation fluide
   const triggerPhaseTransition = (
     from: DegradationState["phase"],
     to: DegradationState["phase"],
@@ -156,15 +163,15 @@ export function useDegradation() {
     state.transitionFrom = from;
     state.transitionTo = to;
 
-    // Appliquer un effet de dommage visuel
+    // Appliquer un effet de dommage visuel (plus doux)
     state.lastDamageTime = Date.now();
 
-    // Durée de transition
+    // Durée de transition plus longue pour fluidité
     setTimeout(() => {
       state.isTransitioning = false;
       state.transitionFrom = null;
       state.transitionTo = null;
-    }, 2500);
+    }, 3500); // Augmenté de 2500 à 3500ms pour plus de fluidité
   };
 
   // Mise a jour du scroll avec détection de boucles améliorée

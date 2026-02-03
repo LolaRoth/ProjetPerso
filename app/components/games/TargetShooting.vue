@@ -39,6 +39,8 @@ const settings = computed(() => difficultySettings[currentDifficulty.value]);
 
 // État du jeu
 const targets = ref<Target[]>([]);
+// INDICE SECRET: Affiche "∞" quand le combo atteint 5
+const showInfinityHint = ref(false);
 const gameState = ref({
   active: false,
   started: false,
@@ -144,6 +146,14 @@ const hitTarget = (id: number) => {
     gameState.value.maxCombo = gameState.value.combo;
   }
 
+  // INDICE SECRET: Affiche "∞" brièvement quand combo = 5
+  if (gameState.value.combo === 5) {
+    showInfinityHint.value = true;
+    setTimeout(() => {
+      showInfinityHint.value = false;
+    }, 600);
+  }
+
   targets.value = targets.value.filter((t) => t.id !== id);
   emit("interaction", 12 + points / 2);
 };
@@ -192,9 +202,15 @@ onUnmounted(() => {
       <span
         >Score: <span class="text-MyGreen">{{ gameState.score }}</span></span
       >
-      <span
-        >Combo: <span class="text-MyYellow">x{{ gameState.combo }}</span></span
-      >
+      <span class="relative">
+        Combo: <span class="text-MyYellow">x{{ gameState.combo }}</span>
+        <!-- Indice ∞ qui apparaît furtivement -->
+        <span
+          v-if="showInfinityHint"
+          class="absolute -top-4 left-1/2 -translate-x-1/2 text-MyBlue/70 text-xs animate-ping"
+          >∞</span
+        >
+      </span>
       <span
         >Précision: <span class="text-MyBlue">{{ accuracy }}%</span></span
       >
