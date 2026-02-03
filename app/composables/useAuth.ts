@@ -157,28 +157,49 @@ export const useAuth = (): AuthReturn => {
       }
 
       if (data.user) {
-        const { error: profileError } = await supabase.from("profiles").insert({
-          id: data.user.id,
-          email: email,
-          username: username || email.split("@")[0],
-          created_at: new Date().toISOString(),
-        });
+        try {
+          const { error: profileError } = await supabase.from("profiles").insert({
+            id: data.user.id,
+            email: email,
+            username: username || email.split("@")[0],
+            created_at: new Date().toISOString(),
+          });
 
-        if (profileError) {
-          console.error("Erreur lors de la création du profil:", profileError);
-          loading.value = false;
-          return { error: new Error(profileError.message) };
+          // Ignorer les erreurs de clé dupliquée (profil existe déjà)
+          if (profileError && profileError.code !== "23505") {
+            console.error("Erreur lors de la création du profil:", profileError);
+            loading.value = false;
+            return { error: new Error(profileError.message) };
+          }
+        } catch (profileErr: any) {
+          // Ignorer les erreurs d'abort
+          if (profileErr?.name !== "AbortError" && !profileErr?.message?.includes("abort")) {
+            console.error("Erreur création profil:", profileErr);
+            loading.value = false;
+            return { error: profileErr as Error };
+          }
         }
 
         user.value = data.user;
         session.value = data.session;
-        await fetchProfile();
+        try {
+          await fetchProfile();
+        } catch (fetchErr: any) {
+          // Ignorer les erreurs d'abort pour fetchProfile
+          if (fetchErr?.name !== "AbortError" && !fetchErr?.message?.includes("abort")) {
+            console.warn("fetchProfile error (non bloquant):", fetchErr);
+          }
+        }
       }
 
       loading.value = false;
       return { error: null };
-    } catch (err) {
+    } catch (err: any) {
       loading.value = false;
+      // Ignorer les erreurs d'abort
+      if (err?.name === "AbortError" || err?.message?.includes("abort")) {
+        return { error: null };
+      }
       return { error: err as Error };
     }
   };
@@ -209,7 +230,14 @@ export const useAuth = (): AuthReturn => {
 
     user.value = data.user;
     session.value = data.session;
-    await fetchProfile();
+    try {
+      await fetchProfile();
+    } catch (fetchErr: any) {
+      // Ignorer les erreurs d'abort
+      if (fetchErr?.name !== "AbortError" && !fetchErr?.message?.includes("abort")) {
+        console.warn("fetchProfile error après signIn (non bloquant):", fetchErr);
+      }
+    }
     loading.value = false;
 
     return { error: null };
@@ -387,44 +415,64 @@ export const useAuth = (): AuthReturn => {
     const supabase = getSupabase();
     if (!supabase) return;
 
-    // Vérifier si le profil existe déjà
-    const { data: existingProfile } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", user.value.id)
-      .maybeSingle();
+    try {
+      // Vérifier si le profil existe déjà
+      const { data: existingProfile, error: fetchError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.value.id)
+        .maybeSingle();
 
-    if (existingProfile) {
-      profile.value = existingProfile;
-      return;
+      // Ignorer les erreurs d'abort
+      if (fetchError && !fetchError.message?.includes("abort")) {
+        console.warn("Erreur lors de la vérification du profil:", fetchError);
+      }
+
+      if (existingProfile) {
+        profile.value = existingProfile;
+        return;
+      }
+
+      // Créer le profil pour l'utilisateur OAuth
+      const email = user.value.email || "";
+      const metadata = user.value.user_metadata || {};
+      const username =
+        (metadata.name as string) ||
+        (metadata.full_name as string) ||
+        email.split("@")[0] ||
+        "Utilisateur";
+
+      const { data: newProfile, error } = await supabase
+        .from("profiles")
+        .insert({
+          id: user.value.id,
+          email: email,
+          username: username,
+          created_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (error) {
+        // Ignorer les erreurs d'abort et de duplicate (profil déjà créé)
+        if (!error.message?.includes("abort") && !error.code?.includes("23505")) {
+          console.error("Erreur lors de la création du profil:", error);
+        }
+        // Si c'est un duplicate, récupérer le profil existant
+        if (error.code?.includes("23505")) {
+          await fetchProfile();
+        }
+        return;
+      }
+
+      profile.value = newProfile;
+    } catch (err: any) {
+      // Ignorer les erreurs d'abort (navigation en cours)
+      if (err?.name === "AbortError" || err?.message?.includes("abort")) {
+        return;
+      }
+      console.error("Erreur inattendue lors de ensureProfile:", err);
     }
-
-    // Créer le profil pour l'utilisateur OAuth
-    const email = user.value.email || "";
-    const metadata = user.value.user_metadata || {};
-    const username =
-      (metadata.name as string) ||
-      (metadata.full_name as string) ||
-      email.split("@")[0] ||
-      "Utilisateur";
-
-    const { data: newProfile, error } = await supabase
-      .from("profiles")
-      .insert({
-        id: user.value.id,
-        email: email,
-        username: username,
-        created_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error("Erreur lors de la création du profil OAuth:", error);
-      return;
-    }
-
-    profile.value = newProfile;
   };
 
   /**
@@ -456,12 +504,24 @@ export const useAuth = (): AuthReturn => {
     loading.value = true;
 
     try {
-      const { data } = await supabase.auth.getSession();
+      const { data, error: sessionError } = await supabase.auth.getSession();
+
+      // Ignorer les erreurs d'abort
+      if (sessionError && !sessionError.message?.includes("abort")) {
+        console.warn("Erreur lors de la récupération de la session:", sessionError);
+      }
 
       if (data.session) {
         user.value = data.session.user;
         session.value = data.session;
-        await fetchProfile();
+        try {
+          await fetchProfile();
+        } catch (profileErr: any) {
+          // Ignorer les erreurs d'abort pour le profil
+          if (profileErr?.name !== "AbortError" && !profileErr?.message?.includes("abort")) {
+            console.warn("Erreur fetchProfile (non bloquante):", profileErr);
+          }
+        }
       }
 
       supabase.auth.onAuthStateChange(
@@ -470,7 +530,14 @@ export const useAuth = (): AuthReturn => {
           session.value = newSession;
 
           if (newSession?.user) {
-            await fetchProfile();
+            try {
+              await fetchProfile();
+            } catch (err: any) {
+              // Ignorer les erreurs d'abort
+              if (err?.name !== "AbortError" && !err?.message?.includes("abort")) {
+                console.warn("Erreur fetchProfile dans onAuthStateChange:", err);
+              }
+            }
           } else {
             profile.value = null;
           }
@@ -478,7 +545,12 @@ export const useAuth = (): AuthReturn => {
       );
 
       initialized.value = true;
-    } catch (err) {
+    } catch (err: any) {
+      // Ignorer les erreurs d'abort (causées par navigation)
+      if (err?.name === "AbortError" || err?.message?.includes("abort")) {
+        // Ne pas logger les erreurs d'abort - c'est normal lors de navigation rapide
+        return;
+      }
       console.error("Erreur lors de l'initialisation de l'auth:", err);
     } finally {
       loading.value = false;

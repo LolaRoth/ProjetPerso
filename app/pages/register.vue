@@ -248,23 +248,36 @@ const handleSubmit = async () => {
 
   isSubmitting.value = true;
 
-  const { error } = await signUp(email.value, password.value, username.value);
+  try {
+    const { error } = await signUp(email.value, password.value, username.value);
 
-  if (error) {
-    errorMessage.value = getErrorMessage(error.message);
+    if (error) {
+      // Ignorer les erreurs d'abort
+      if (error.message?.includes("abort") || (error as any).name === "AbortError") {
+        return;
+      }
+      errorMessage.value = getErrorMessage(error.message);
+      isSubmitting.value = false;
+      return;
+    }
+
+    // Afficher le message de succès
+    successMessage.value =
+      "Compte créé avec succès ! Vérifiez votre email pour confirmer votre inscription.";
     isSubmitting.value = false;
-    return;
+
+    // Redirection vers la page de bienvenue après un court délai
+    setTimeout(() => {
+      router.push("/welcome");
+    }, 2000);
+  } catch (err: any) {
+    // Ignorer les erreurs d'abort
+    if (err?.name === "AbortError" || err?.message?.includes("abort")) {
+      return;
+    }
+    errorMessage.value = "Une erreur est survenue";
+    isSubmitting.value = false;
   }
-
-  // Afficher le message de succès
-  successMessage.value =
-    "Compte créé avec succès ! Vérifiez votre email pour confirmer votre inscription.";
-  isSubmitting.value = false;
-
-  // Redirection vers la page de bienvenue après un court délai
-  setTimeout(() => {
-    router.push("/welcome");
-  }, 2000);
 };
 
 /**

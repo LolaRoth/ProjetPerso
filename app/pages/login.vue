@@ -251,16 +251,29 @@ const handleSubmit = async () => {
   errorMessage.value = "";
   isSubmitting.value = true;
 
-  const { error } = await signIn(email.value, password.value);
+  try {
+    const { error } = await signIn(email.value, password.value);
 
-  if (error) {
-    errorMessage.value = getErrorMessage(error.message);
+    if (error) {
+      // Ignorer les erreurs d'abort (navigation)
+      if (error.message?.includes("abort") || (error as any).name === "AbortError") {
+        return;
+      }
+      errorMessage.value = getErrorMessage(error.message);
+      isSubmitting.value = false;
+      return;
+    }
+
+    // Redirection vers l'écran de bienvenue après connexion réussie
+    router.push("/welcome");
+  } catch (err: any) {
+    // Ignorer les erreurs d'abort
+    if (err?.name === "AbortError" || err?.message?.includes("abort")) {
+      return;
+    }
+    errorMessage.value = "Une erreur est survenue";
     isSubmitting.value = false;
-    return;
   }
-
-  // Redirection vers l'écran de bienvenue après connexion réussie
-  router.push("/welcome");
 };
 
 /**
@@ -270,10 +283,23 @@ const handleGoogleSignIn = async () => {
   errorMessage.value = "";
   isGoogleLoading.value = true;
 
-  const { error } = await signInWithGoogle();
+  try {
+    const { error } = await signInWithGoogle();
 
-  if (error) {
-    errorMessage.value = error.message;
+    if (error) {
+      // Ignorer les erreurs d'abort
+      if (error.message?.includes("abort") || (error as any).name === "AbortError") {
+        return;
+      }
+      errorMessage.value = error.message;
+      isGoogleLoading.value = false;
+    }
+  } catch (err: any) {
+    // Ignorer les erreurs d'abort
+    if (err?.name === "AbortError" || err?.message?.includes("abort")) {
+      return;
+    }
+    errorMessage.value = "Une erreur est survenue avec Google";
     isGoogleLoading.value = false;
   }
   // Note: si pas d'erreur, l'utilisateur est redirigé vers Google

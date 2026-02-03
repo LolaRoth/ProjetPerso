@@ -1,12 +1,17 @@
 {
   "name": "Experience - Le site qui se dégrade",
   "short_name": "Experience",
-  "description": "Une expérience web interactive unique où le site se dégrade progressivement.",
-  "start_url": "/",
+  "description": "Une expérience web interactive unique où le site se dégrade progressivement. Jouez, explorez, survivez au chaos !",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "id": "experience-app",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "browser"],
   "background_color": "#0a0a0a",
   "theme_color": "#0a0a0a",
-  "orientation": "portrait-primary",
+  "orientation": "any",
+  "dir": "ltr",
+  "lang": "fr-FR",
   "icons": [
     {
       "src": "/favicon.svg",
@@ -17,14 +22,45 @@
     {
       "src": "/android-chrome-192x192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
       "src": "/android-chrome-512x512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ],
-  "categories": ["games", "entertainment"],
-  "lang": "fr"
+  "screenshots": [
+    {
+      "src": "/screenshot-wide.png",
+      "sizes": "1920x1080",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Experience - Écran d'accueil"
+    },
+    {
+      "src": "/screenshot-narrow.png",
+      "sizes": "750x1334",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Experience - Vue mobile"
+    }
+  ],
+  "categories": ["games", "entertainment", "education"],
+  "iarc_rating_id": "",
+  "prefer_related_applications": false,
+  "shortcuts": [
+    {
+      "name": "Jouer",
+      "short_name": "Jouer",
+      "description": "Commencer l'expérience",
+      "url": "/",
+      "icons": [{ "src": "/favicon.svg", "sizes": "96x96" }]
+    }
+  ],
+  "edge_side_panel": {
+    "preferred_width": 400
+  }
 }

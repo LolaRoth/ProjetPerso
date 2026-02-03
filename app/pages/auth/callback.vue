@@ -99,31 +99,53 @@ definePageMeta({
   middleware: [],
 });
 
+// SEO - pas d'indexation
+useSeoMeta({
+  robots: "noindex, nofollow",
+});
+
 const router = useRouter();
 const { initAuth, isAuthenticated, ensureProfile } = useAuth();
 
 const loading = ref(true);
 const error = ref<string | null>(null);
 
+// Fonction pour vérifier si c'est une erreur d'abort (non critique)
+const isAbortError = (e: any): boolean => {
+  return (
+    e?.name === "AbortError" ||
+    e?.message?.includes("abort") ||
+    e?.message?.includes("AbortError")
+  );
+};
+
 onMounted(async () => {
+  // Petit délai initial pour éviter les race conditions
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
   try {
     // Supabase détecte automatiquement la session dans l'URL
-    // grâce à detectSessionInUrl: true dans le plugin
     await initAuth();
 
-    // Petit délai pour laisser Supabase traiter le token
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    // Délai pour laisser Supabase traiter le token OAuth
+    await new Promise((resolve) => setTimeout(resolve, 800));
 
     // Vérifier si l'utilisateur est connecté
     if (isAuthenticated.value) {
       // S'assurer qu'un profil existe pour l'utilisateur OAuth
-      await ensureProfile();
+      try {
+        await ensureProfile();
+      } catch (profileError: any) {
+        // Ignorer les erreurs d'abort pour le profil - non critiques
+        if (!isAbortError(profileError)) {
+          console.warn("Erreur création profil (non bloquante):", profileError);
+        }
+      }
 
       loading.value = false;
       // Rediriger vers la page de bienvenue
-      setTimeout(() => {
-        router.push("/welcome");
-      }, 300);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      router.push("/welcome");
     } else {
       // Vérifier s'il y a une erreur dans l'URL
       const urlParams = new URLSearchParams(window.location.search);
@@ -138,11 +160,33 @@ onMounted(async () => {
       if (errorParam) {
         error.value = decodeURIComponent(errorParam);
       } else {
+        // Peut-être que la session est encore en cours de traitement
+        // Réessayer une fois
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await initAuth();
+        
+        if (isAuthenticated.value) {
+          loading.value = false;
+          router.push("/welcome");
+          return;
+        }
+        
         error.value = "La connexion a échoué. Veuillez réessayer.";
       }
       loading.value = false;
     }
   } catch (e: any) {
+    // Ignorer les erreurs d'abort - elles sont causées par la navigation
+    if (isAbortError(e)) {
+      console.log("Navigation en cours, erreur d'abort ignorée");
+      // Vérifier quand même si on est connecté
+      if (isAuthenticated.value) {
+        loading.value = false;
+        router.push("/welcome");
+        return;
+      }
+    }
+    
     console.error("Erreur callback OAuth:", e);
     error.value = e.message || "Une erreur inattendue s'est produite.";
     loading.value = false;

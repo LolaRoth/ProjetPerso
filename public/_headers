@@ -1,0 +1,57 @@
+# Headers de sécurité et performance pour Experience
+# Compatible avec Netlify, Vercel, Cloudflare Pages
+
+/*
+  # Sécurité
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  X-XSS-Protection: 1; mode=block
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()
+  
+  # Performance
+  X-DNS-Prefetch-Control: on
+
+# Assets statiques - cache très long (1 an)
+/_nuxt/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Fonts - cache très long
+/font/*
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
+
+# SVG - cache long
+/svg/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Images
+/*.png
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.jpg
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.webp
+  Cache-Control: public, max-age=31536000, immutable
+
+# Favicon - cache 1 jour (peut changer)
+/favicon.svg
+  Cache-Control: public, max-age=86400
+
+/favicon.ico
+  Cache-Control: public, max-age=86400
+
+# Manifest et configs
+/site.webmanifest
+  Cache-Control: public, max-age=86400
+  Content-Type: application/manifest+json
+
+/browserconfig.xml
+  Cache-Control: public, max-age=86400
+
+/robots.txt
+  Cache-Control: public, max-age=86400
+
+/sitemap.xml
+  Cache-Control: public, max-age=3600
